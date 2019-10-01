@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,15 +18,15 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
-using System.Collections.Concurrent;
+
 using System.Collections.Generic;
 
 using ClassicUO.Game.Data;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
 using ClassicUO.Game.Map;
-using ClassicUO.Game.Scenes;
 using ClassicUO.Utility.Platforms;
 
 using Microsoft.Xna.Framework;
@@ -35,8 +36,11 @@ namespace ClassicUO.Game
     internal static class World
     {
         private static readonly EffectManager _effectManager = new EffectManager();
-        private static readonly List<Entity> _toRemove = new List<Entity>();
+        private static readonly List<Serial> _toRemove = new List<Serial>();
 
+        public static Point RangeSize;
+
+        public static ObjectPropertiesListManager OPL { get; } = new ObjectPropertiesListManager();
 
         public static CorpseManager CorpseManager { get; } = new CorpseManager();
 
@@ -52,11 +56,18 @@ namespace ClassicUO.Game
 
         public static Map.Map Map { get; private set; }
 
-        public static byte ViewRange { get; set; } = Constants.MAX_VIEW_RANGE;
-
-        public static Serial LastAttack { get; set; }
+        public static byte ClientViewRange { get; set; } = Constants.MAX_VIEW_RANGE;
 
         public static bool SkillsRequested { get; set; }
+
+        public static Seasons Season { get; private set; } = Seasons.Summer;
+        public static Seasons OldSeason { get; set; } = Seasons.Summer;
+
+        public static int OldMusicIndex { get; set; }
+
+        public static WorldTextManager WorldTextManager { get; } = new WorldTextManager();
+
+        public static JournalManager Journal { get; } = new JournalManager();
 
         public static int MapIndex
         {
@@ -71,15 +82,13 @@ namespace ClassicUO.Game
                     {
                         Map.Destroy();
                         Map = null;
+
                         return;
                     }
 
                     if (Map != null)
                     {
-                        if (MapIndex >= 0)
-                        {
-                            Map.Destroy();                       
-                        }
+                        if (MapIndex >= 0) Map.Destroy();
 
                         Position position = Player.Position;
                         Map = null;
@@ -94,11 +103,12 @@ namespace ClassicUO.Game
                         Player.AddToTile();
 
                         Player.ClearSteps();
-                        Player.ProcessDelta();                  
+                        Player.ProcessDelta();
                     }
                     else
                     {
-                        Map = new Map.Map(value);                       
+                        Map = new Map.Map(value);
+
                         if (Player != null)
                             Map.Center = new Point(Player.X, Player.Y);
                         Map.Initialize();
@@ -113,14 +123,41 @@ namespace ClassicUO.Game
 
         public static IsometricLight Light { get; } = new IsometricLight
         {
-            Overall = 0, Personal = 0, RealOverall = 0, RealPersonal = 0,
+            Overall = 0, Personal = 0, RealOverall = 0, RealPersonal = 0
         };
 
         public static LockedFeatures ClientLockedFeatures { get; } = new LockedFeatures();
 
-        public static ClientFeatures ClientFlags { get; } = new ClientFeatures();
+        public static ClientFeatures ClientFeatures { get; } = new ClientFeatures();
 
         public static string ServerName { get; set; }
+
+
+        public static void ChangeSeason(Seasons season, int music)
+        {
+            Season = season;
+
+            foreach (int i in Map.GetUsedChunks())
+            {
+                Chunk chunk = Map.Chunks[i];
+
+                for (int x = 0; x < 8; x++)
+                {
+                    for (int y = 0; y < 8; y++)
+                    {
+                        Tile tile = chunk.Tiles[x, y];
+
+                        for (GameObject obj = tile.FirstNode; obj != null; obj = obj.Right)
+                        {
+                            obj.UpdateGraphicBySeason();
+                        }
+                    }
+                }
+            }
+
+            if (Engine.Profile.Current.EnableCombatMusic)
+                Engine.SceneManager.CurrentScene.Audio.PlayMusic(music);
+        }
 
 
         public static void Update(double totalMS, double frameMS)
@@ -131,7 +168,7 @@ namespace ClassicUO.Game
                 {
                     mob.Update(totalMS, frameMS);
 
-                    if (mob.Distance > ViewRange)
+                    if (mob.Distance > ClientViewRange)
                         RemoveMobile(mob);
 
                     if (mob.IsDestroyed)
@@ -141,21 +178,21 @@ namespace ClassicUO.Game
                 if (_toRemove.Count != 0)
                 {
                     for (int i = 0; i < _toRemove.Count; i++)
-                    {
                         Mobiles.Remove(_toRemove[i]);
-                        _toRemove.RemoveAt(i--);
-                    }
+
+                    Mobiles.ProcessDelta();
+                    _toRemove.Clear();
                 }
 
                 foreach (Item item in Items)
                 {
                     item.Update(totalMS, frameMS);
 
-                    if (item.OnGround && item.Distance > ViewRange)
+                    if (item.OnGround && item.Distance > ClientViewRange)
                     {
                         if (item.IsMulti)
                         {
-                            if (HouseManager.TryToRemove(item, ViewRange))
+                            if (HouseManager.TryToRemove(item, ClientViewRange))
                                 RemoveItem(item);
                         }
                         else
@@ -169,13 +206,15 @@ namespace ClassicUO.Game
                 if (_toRemove.Count != 0)
                 {
                     for (int i = 0; i < _toRemove.Count; i++)
-                    {
                         Items.Remove(_toRemove[i]);
-                        _toRemove.RemoveAt(i--);
-                    }
+
+                    Items.ProcessDelta();
+                    _toRemove.Clear();
                 }
 
                 _effectManager.Update(totalMS, frameMS);
+
+                WorldTextManager.Update(totalMS, frameMS);
             }
         }
 
@@ -197,10 +236,10 @@ namespace ClassicUO.Game
         {
             Item item = Items.Get(serial);
 
-            if (item == null || item.IsDestroyed)
+            if (item == null /*|| item.IsDestroyed*/)
             {
-                Items.Remove(serial);
-                item = new Item(serial);
+                //Items.Remove(serial);
+                item = Item.Create(serial);
             }
 
             return item;
@@ -210,50 +249,63 @@ namespace ClassicUO.Game
         {
             Mobile mob = Mobiles.Get(serial);
 
-            if (mob == null || mob.IsDestroyed)
+            if (mob == null /*|| mob.IsDestroyed*/)
             {
-                Mobiles.Remove(serial);
+                //Mobiles.Remove(serial);
                 mob = new Mobile(serial);
-                GameActions.RequestMobileStatus(mob);
             }
 
             return mob;
         }
 
-        public static bool RemoveItem(Serial serial)
+        public static bool RemoveItem(Serial serial, bool forceRemove = false)
         {
             Item item = Items.Get(serial);
 
             if (item == null)
-            {
-                //ToAdd.RemoveWhere(i => i == serial);
-
                 return false;
-            }
 
-            if (item.Layer != Layer.Invalid && item.RootContainer.IsValid)
+            if (item.Layer != Layer.Invalid)
             {
                 Entity e = Get(item.RootContainer);
+
                 if (e != null && e.HasEquipment)
-                    e.Equipment[(int) item.Layer] = null;
+                {
+                    int index = (int) item.Layer;
+
+                    if (index >= 0 && index < e.Equipment.Length)
+                        e.Equipment[index] = null;
+                }
             }
 
             foreach (Item i in item.Items)
-                RemoveItem(i);
+                RemoveItem(i, forceRemove);
+
+
             item.Items.Clear();
             item.Destroy();
+
+            if (forceRemove)
+                Items.Remove(serial);
 
             return true;
         }
 
-        public static bool RemoveMobile(Serial serial)
+        public static bool RemoveMobile(Serial serial, bool forceRemove = false)
         {
             Mobile mobile = Mobiles.Get(serial);
 
-            if (mobile == null) return false;
-            foreach (Item i in mobile.Items) RemoveItem(i);
+            if (mobile == null)
+                return false;
+
+            foreach (Item i in mobile.Items)
+                RemoveItem(i, forceRemove);
+
             mobile.Items.Clear();
             mobile.Destroy();
+
+            if (forceRemove)
+                Mobiles.Remove(serial);
 
             return true;
         }
@@ -279,16 +331,23 @@ namespace ClassicUO.Game
             Map = null;
             Light.Overall = Light.RealOverall = 0;
             Light.Personal = Light.RealPersonal = 0;
-            ClientFlags.SetFlags(0);
+            ClientFeatures.SetFlags(0);
             ClientLockedFeatures.SetFlags(0);
             HouseManager.Clear();
-            Party.Members.Clear();
+            Party.Clear();
             ServerName = string.Empty;
-            LastAttack = 0;
+            TargetManager.LastAttack = 0;
             Chat.PromptData = default;
             _effectManager.Clear();
             _toRemove.Clear();
             CorpseManager.Clear();
+            OPL.Clear();
+
+            Season = Seasons.Summer;
+            OldSeason = Seasons.Summer;
+
+            Journal.Clear();
+            WorldTextManager.Clear();
         }
 
         private static void InternalMapChangeClear(bool noplayer)
@@ -308,6 +367,7 @@ namespace ClassicUO.Game
                     if (item.RootContainer == Player)
                         continue;
                 }
+
                 RemoveItem(item);
             }
 
@@ -318,6 +378,7 @@ namespace ClassicUO.Game
                     if (mob == Player)
                         continue;
                 }
+
                 RemoveMobile(mob);
             }
         }

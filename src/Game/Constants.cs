@@ -1,22 +1,55 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿#region license
 
-using ClassicUO.Utility;
+//  Copyright (C) 2019 ClassicUO Development Community on Github
+//
+//	This project is an alternative client for the game Ultima Online.
+//	The goal of this is to develop a lightweight client considering 
+//	new technologies.  
+//      
+//  This program is free software: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License as published by
+//  the Free Software Foundation, either version 3 of the License, or
+//  (at your option) any later version.
+//
+//  This program is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#endregion
+
+using System;
 
 namespace ClassicUO.Game
 {
-    static class Constants
+    internal static class Constants
     {
+        [Flags]
+        public enum RULES : uint
+        {
+            NUMERIC = 0x00000001,
+            SYMBOL = 0x00000002,
+            LETTER = 0x00000004,
+            SPACE = 0x00000008,
+            UNUMERIC = 0x00000010 // unsigned
+        }
+
+        public const string WIKI_LINK = "https://github.com/andreakarasho/ClassicUO/wiki";
+
+        public const int MIN_FPS = 15;
+        public const int MAX_FPS = 250;
+        public const int LOGIN_SCREEN_FPS = 60;
+
         public const int CHARACTER_ANIMATION_DELAY = 80;
         public const int ITEM_EFFECT_ANIMATION_DELAY = 50;
 
         public const int MAX_STEP_COUNT = 5;
-        public const int TURN_DELAY = 100;
+        public const int TURN_DELAY = 80; // original client 12.5 fps = 80ms delay
         public const int TURN_DELAY_FAST = 45;
-        public const int WALKING_DELAY = 750;
+        public const int WALKING_DELAY = 150; // 750
         public const int PLAYER_WALKING_DELAY = 150;
         public const int DEFAULT_CHARACTER_HEIGHT = 16;
         public const int DEFAULT_BLOCK_HEIGHT = 16;
@@ -35,13 +68,9 @@ namespace ClassicUO.Game
 
         public const int MAX_FAST_WALK_STACK_SIZE = 5;
 
-        public const int MAX_HOUSE_DISTANCE = 50;
+        public const byte FOLIAGE_ALPHA = 76;
+        public const byte ALPHA_TIME = 20;
 
-        public const float FOLIAGE_ALPHA = .7f;
-        public const int ALPHA_TIME = 25;
-
-        public const float ALPHA_OBJECT_VALUE = 200.0f;
-        public const int ALPHA_OBJECT_TIME = 200;
 
         public const int SPELLBOOK_1_SPELLS_COUNT = 64;
         public const int SPELLBOOK_2_SPELLS_COUNT = 17;
@@ -70,7 +99,7 @@ namespace ClassicUO.Game
         public const ushort FIELD_REPLACE_GRAPHIC = 0x1826;
         public const ushort TREE_REPLACE_GRAPHIC = 0x0E59;
 
-        public const int MIN_CIRCLE_OF_TRANSPARENCY_RADIUS = 2;
+        public const int MIN_CIRCLE_OF_TRANSPARENCY_RADIUS = 1;
         public const int MAX_CIRCLE_OF_TRANSPARENCY_RADIUS = 8;
 
         public const int MAX_ABILITIES_COUNT = 32;
@@ -89,15 +118,11 @@ namespace ClassicUO.Game
 
         public const float SOUND_DELTA = 1000f;
 
+        public const uint JOURNAL_LOCALSERIAL = 0xFFFFFFE1;
+        public const uint SKILLSTD_LOCALSERIAL = 0xFFFFFFE2;
+        public const uint PROFILE_LOCALSERIAL = 0xFFFFFFE3;
 
-        [Flags]
-        public enum RULES : uint
-        {
-            NUMERIC = 0x00000001,
-            SYMBOL = 0x00000002,
-            LETTER = 0x00000004,
-            SPACE = 0x00000008,
-            UNUMERIC = 0x00000010, // unsigned
-        }
+        public const byte MIN_CONTAINER_SIZE_PERC = 50;
+        public const byte MAX_CONTAINER_SIZE_PERC = 200;
     }
 }

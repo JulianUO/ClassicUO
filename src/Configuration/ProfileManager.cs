@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,18 +18,14 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-#endregion
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
-using ClassicUO.Game.UI.Gumps;
+#endregion
+
+using System;
+using System.IO;
+
 using ClassicUO.Utility;
-using ClassicUO.Utility.Coroutines;
+using ClassicUO.Utility.Logging;
 
 using Newtonsoft.Json;
 
@@ -42,21 +39,58 @@ namespace ClassicUO.Configuration
         {
             string path = FileSystemHelper.CreateFolderIfNotExists(Engine.ExePath, "Data", "Profiles", username, servername, charactername);
 
-            if (!File.Exists(Path.Combine(path, "settings.json")))
+
+
+            // this is a temporary patch to change the profile settings name safety
+            string fileToLoad = Path.Combine(path, "settings.json");
+            string newPath = Path.Combine(path, "profile.json");
+
+            if (File.Exists(newPath))
             {
-                Current = new Profile(username, servername, charactername);
+                if (File.Exists(fileToLoad))
+                {
+                    try
+                    {
+                        File.Delete(fileToLoad);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Message(LogTypes.Warning, $"Failed to delete file: '{fileToLoad}'");
+                    }
+                }
+
+                fileToLoad = newPath;
             }
+            //
+
+
+
+            if (!File.Exists(fileToLoad))
+                Current = new Profile(username, servername, charactername);
             else
             {
-                Current = ConfigurationResolver.Load<Profile>(Path.Combine(path, "settings.json"), 
-                new JsonSerializerSettings()
+                Current = ConfigurationResolver.Load<Profile>(fileToLoad,
+                                                              new JsonSerializerSettings
+                                                              {
+                                                                  TypeNameHandling = TypeNameHandling.All,
+                                                                  MetadataPropertyHandling = MetadataPropertyHandling.ReadAhead
+                                                              });
+                if (Current == null)
                 {
-                    TypeNameHandling = TypeNameHandling.All,
-                    MetadataPropertyHandling = MetadataPropertyHandling.ReadAhead                
-                }) ?? new Profile(username, servername, charactername);
+                    Current = new Profile(username, servername, charactername);
+                }
+                else
+                {
+                    Current.Username = username;
+                    Current.ServerName = servername;
+                    Current.CharacterName = charactername;
+                }
             }
         }
 
-        public void UnLoadProfile() => Current = null;
+        public void UnLoadProfile()
+        {
+            Current = null;
+        }
     }
 }

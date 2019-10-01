@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,6 +18,7 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System;
@@ -49,7 +51,7 @@ namespace ClassicUO.Game.UI.Gumps
         }
 
         public BuffGump(int x, int y) : this()
-        {          
+        {
             X = x;
             Y = y;
 
@@ -62,6 +64,7 @@ namespace ClassicUO.Game.UI.Gumps
         private void BuildGump()
         {
             WantUpdateSize = false;
+
             Add(_background = new GumpPic(0, 0, _graphic, 0)
             {
                 LocalSerial = 1
@@ -86,7 +89,7 @@ namespace ClassicUO.Game.UI.Gumps
         {
             base.Save(writer);
             writer.Write(_graphic);
-            writer.Write((byte)_direction);
+            writer.Write((byte) _direction);
         }
 
         public override void Restore(BinaryReader reader)
@@ -111,7 +114,7 @@ namespace ClassicUO.Game.UI.Gumps
 
         public void RemoveBuff(Graphic graphic)
         {
-            foreach (BuffControlEntry entry in Children.OfType<BuffControlEntry>().Where(s => s.Icon.Graphic == graphic))  
+            foreach (BuffControlEntry entry in Children.OfType<BuffControlEntry>().Where(s => s.Icon.Graphic == graphic))
             {
                 if (Height > _background.Texture.Height)
                 {
@@ -124,10 +127,7 @@ namespace ClassicUO.Game.UI.Gumps
                         _background.Y -= delta;
                         _button.Y -= delta;
                     }
-                    else if (_direction == GumpDirection.LEFT_VERTICAL)
-                    {
-                        Height -= delta;
-                    }
+                    else if (_direction == GumpDirection.LEFT_VERTICAL) Height -= delta;
                 }
 
                 if (Width > _background.Texture.Width)
@@ -141,10 +141,7 @@ namespace ClassicUO.Game.UI.Gumps
                         _background.X -= delta;
                         _button.X -= delta;
                     }
-                    else if (_direction == GumpDirection.LEFT_HORIZONTAL)
-                    {
-                        Width -= delta;
-                    }
+                    else if (_direction == GumpDirection.LEFT_HORIZONTAL) Width -= delta;
                 }
 
                 entry.Dispose();
@@ -156,16 +153,15 @@ namespace ClassicUO.Game.UI.Gumps
 
         private void UpdateElements()
         {
-            BuffControlEntry[] list = GetControls<BuffControlEntry>();
+            var list = FindControls<BuffControlEntry>();
             int offset = 0;
 
             int maxWidth = 0;
             int maxHeight = 0;
 
-            for (int i = 0; i < list.Length; i++)
+            int i = 0;
+            foreach (var e in list)
             {
-                BuffControlEntry e = list[i];
-
                 maxWidth += e.Width;
                 maxHeight += e.Height;
 
@@ -180,6 +176,7 @@ namespace ClassicUO.Game.UI.Gumps
                             Height = 25 + offset;
 
                         break;
+
                     case GumpDirection.LEFT_HORIZONTAL:
                         e.X = 26 + offset;
                         e.Y = 5;
@@ -189,9 +186,10 @@ namespace ClassicUO.Game.UI.Gumps
                             Width = 26 + offset;
 
                         break;
+
                     case GumpDirection.RIGHT_VERTICAL:
                         e.X = 5;
-                        e.Y = (Height - 48) - offset;
+                        e.Y = Height - 48 - offset;
 
                         if (e.Y < 0)
                         {
@@ -200,17 +198,24 @@ namespace ClassicUO.Game.UI.Gumps
                             _background.Y -= e.Y;
                             _button.Y -= e.Y;
 
-                            for (int j = 0; j < i; j++)
-                                list[j].Y -= e.Y;
+                            int j = 0;
+                            foreach (var ee in list)
+                            {
+                                if (j >= i)
+                                    break;
+                                ee.Y -= e.Y;
+                                j++;
+                            }
 
-                            e.Y = (Height - 48) - offset;
-                        }      
+                            e.Y = Height - 48 - offset;
+                        }
 
                         offset += 31;
 
                         break;
+
                     case GumpDirection.RIGHT_HORIZONTAL:
-                        e.X = (Width - 48) - offset;
+                        e.X = Width - 48 - offset;
                         e.Y = 5;
 
                         if (e.X < 0)
@@ -220,16 +225,24 @@ namespace ClassicUO.Game.UI.Gumps
                             _background.X -= e.X;
                             _button.X -= e.X;
 
-                            for (int j = 0; j < i; j++)
-                                list[j].X -= e.X;
+                            int j = 0;
+                            foreach (var ee in list)
+                            {
+                                if (j >= i)
+                                    break;
+                                ee.X -= e.X;
+                                j++;
+                            }
 
-                            e.X = (Width - 48) - offset;
+                            e.X = Width - 48 - offset;
                         }
 
                         offset += 31;
 
                         break;
                 }
+
+                i++;
             }
         }
 
@@ -256,18 +269,21 @@ namespace ClassicUO.Game.UI.Gumps
                     _direction = GumpDirection.LEFT_HORIZONTAL;
 
                     break;
+
                 case 0x7581:
                     _button.X = 34;
                     _button.Y = 78;
                     _direction = GumpDirection.RIGHT_VERTICAL;
 
                     break;
+
                 case 0x7582:
                     _button.X = 76;
                     _button.Y = 36;
                     _direction = GumpDirection.RIGHT_HORIZONTAL;
 
                     break;
+
                 case 0x757F:
                 default:
                     _button.X = 0;
@@ -301,6 +317,8 @@ namespace ClassicUO.Game.UI.Gumps
             private byte _alpha;
             private bool _decreaseAlpha;
 
+            private float _updateTooltipTime;
+
             public BuffControlEntry(BuffIcon icon) : base(0, 0, icon.Graphic, 0)
             {
                 Icon = icon;
@@ -309,7 +327,7 @@ namespace ClassicUO.Game.UI.Gumps
                 _alpha = 0xFF;
                 _decreaseAlpha = true;
                 _timer = (uint) (icon.Timer <= 0 ? 0xFFFF_FFFF : Engine.Ticks + icon.Timer * 1000);
-               
+
                 SetTooltip(icon.Text);
             }
 
@@ -322,8 +340,6 @@ namespace ClassicUO.Game.UI.Gumps
                 WantUpdateSize = false;
                 CanMove = true;
             }
-
-            private float _updateTooltipTime;
 
             public override void Update(double totalMS, double frameMS)
             {
@@ -343,9 +359,7 @@ namespace ClassicUO.Game.UI.Gumps
                 if (_timer != 0xFFFF_FFFF && delta < 10000)
                 {
                     if (delta <= 0)
-                    {
-                        ((BuffGump)Parent).RemoveBuff(Icon.Graphic);
-                    }
+                        ((BuffGump) Parent).RemoveBuff(Icon.Graphic);
                     else
                     {
                         int alpha = _alpha;
@@ -375,12 +389,14 @@ namespace ClassicUO.Game.UI.Gumps
                         _alpha = (byte) alpha;
                     }
                 }
-
             }
 
-            public override bool Draw(Batcher2D batcher, int x, int y)
+            public override bool Draw(UltimaBatcher2D batcher, int x, int y)
             {
-                return batcher.Draw2D(Texture, x, y, ShaderHuesTraslator.GetHueVector(0, false, 1.0f - (_alpha / 255f), false));
+                ResetHueVector();
+                ShaderHuesTraslator.GetHueVector(ref _hueVector, 0, false, 1.0f - _alpha / 255f, true);
+
+                return batcher.Draw2D(Texture, x, y, ref _hueVector);
             }
         }
     }

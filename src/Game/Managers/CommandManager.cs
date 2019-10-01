@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,12 +18,14 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System;
 using System.Collections.Generic;
 
-using ClassicUO.Game.UI.Gumps;
+using ClassicUO.Game.GameObjects;
+using ClassicUO.Input;
 using ClassicUO.Utility.Logging;
 
 namespace ClassicUO.Game.Managers
@@ -34,16 +37,29 @@ namespace ClassicUO.Game.Managers
 
         public static void Initialize()
         {
-            Register("info", (s) =>
+            Register("info", s =>
             {
                 if (!TargetManager.IsTargeting)
-                {
-                    TargetManager.SetTargeting(CursorTarget.SetTargetClientSide, 6983686, 0);
-                }
+                    TargetManager.SetTargeting(CursorTarget.SetTargetClientSide, CursorType.Target, TargetType.Neutral);
                 else
-                {
                     TargetManager.CancelTarget();
+            });
+
+            Register("focus", s => { Engine.DebugFocus = !Engine.DebugFocus; });
+            Register("datetime", s =>
+            {
+                if(World.Player != null)
+                {
+                    GameActions.Print($"Current DateTime.Now is {DateTime.Now}");
+                    GameActions.Print($"Current CurrDateTime is {Engine.CurrDateTime}");
                 }
+            });
+            Register("hue", s =>
+            {
+                if (!TargetManager.IsTargeting)
+                    TargetManager.SetTargeting(CursorTarget.HueCommandTarget, CursorType.Target, TargetType.Neutral);
+                else
+                    TargetManager.CancelTarget();
             });
         }
 
@@ -66,21 +82,26 @@ namespace ClassicUO.Game.Managers
                 _commands.Remove(name);
         }
 
-        public static void UnRegisterAll() => _commands.Clear();        
+        public static void UnRegisterAll()
+        {
+            _commands.Clear();
+        }
 
         public static void Execute(string name, params string[] args)
         {
             name = name.ToLower();
 
             if (_commands.TryGetValue(name, out var action))
-            {
                 action.Invoke(args);
-            }
             else
-            {
                 Log.Message(LogTypes.Warning, $"Commad: '{name}' not exists");
-            }
         }
 
+        public static void OnHueTarget(Entity entity)
+        {
+            TargetManager.TargetGameObject(entity);
+            Mouse.LastLeftButtonClickTime = 0;
+            GameActions.Print($"Item ID: {entity.Graphic}\nHue: {entity.Hue}");
+        }
     }
 }

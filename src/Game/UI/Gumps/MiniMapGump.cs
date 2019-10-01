@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,6 +18,7 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System.IO;
@@ -25,7 +27,6 @@ using System.Linq;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Map;
-using ClassicUO.Game.Scenes;
 using ClassicUO.Input;
 using ClassicUO.IO;
 using ClassicUO.IO.Resources;
@@ -34,20 +35,18 @@ using ClassicUO.Renderer;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-using System.Diagnostics;
-
 namespace ClassicUO.Game.UI.Gumps
 {
     internal class MiniMapGump : Gump
     {
-        private SpriteTexture _gumpTexture, _mapTexture;
-        private bool _forceUpdate;
+        private bool _draw;
+        //private bool _forceUpdate;
+        private UOTexture16 _gumpTexture, _mapTexture;
+        private int _lastMap = -1;
         private Texture2D _playerIndicator, _mobilesIndicator;
         private long _timeMS;
         private bool _useLargeMap;
         private ushort _x, _y;
-        private int _lastMap = -1;
-        private bool _draw;
 
         public MiniMapGump() : base(0, 0)
         {
@@ -55,8 +54,7 @@ namespace ClassicUO.Game.UI.Gumps
             AcceptMouseInput = true;
             CanBeSaved = true;
         }
-
-
+        
         public override void Save(BinaryWriter writer)
         {
             base.Save(writer);
@@ -67,20 +65,28 @@ namespace ClassicUO.Game.UI.Gumps
         {
             base.Restore(reader);
             _useLargeMap = reader.ReadBoolean();
-            _forceUpdate = true;
+            CreateMap();
+        }
+
+        private void CreateMap()
+        {
+            _gumpTexture = FileManager.Gumps.GetTexture(_useLargeMap ? (ushort) 5011 : (ushort) 5010);
+            Width = _gumpTexture.Width;
+            Height = _gumpTexture.Height;
+            CreateMiniMapTexture(true);
         }
 
         public override void Update(double totalMS, double frameMS)
         {
-            if (_gumpTexture == null || _gumpTexture.IsDisposed || _forceUpdate)
-            {
-                _gumpTexture = FileManager.Gumps.GetTexture(_useLargeMap ? (ushort) 5011 : (ushort) 5010);
-                Width = _gumpTexture.Width;
-                Height = _gumpTexture.Height;
-                CreateMiniMapTexture();
+            if (!World.InGame)
+                return;
 
-                if (_forceUpdate)
-                    _forceUpdate = false;
+            if (_gumpTexture == null || _gumpTexture.IsDisposed) CreateMap();
+
+            if (_lastMap != World.MapIndex)
+            {
+                CreateMap();
+                _lastMap = World.MapIndex;
             }
 
             if (_gumpTexture != null)
@@ -96,15 +102,23 @@ namespace ClassicUO.Game.UI.Gumps
             }
         }
 
+        public bool ToggleSize()
+        {
+            _useLargeMap = !_useLargeMap;
+            CreateMap();
+            return _useLargeMap;
+        }
 
-        public override bool Draw(Batcher2D batcher, int x, int y)
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
         {
             if (_gumpTexture == null || _gumpTexture.IsDisposed || IsDisposed)
                 return false;
 
-            batcher.Draw2D(_gumpTexture, x, y, Vector3.Zero);
+            ResetHueVector();
+
+            batcher.Draw2D(_gumpTexture, x, y, ref _hueVector);
             CreateMiniMapTexture();
-            batcher.Draw2D(_mapTexture, x, y, Vector3.Zero);      
+            batcher.Draw2D(_mapTexture, x, y, ref _hueVector);
 
             if (_draw)
             {
@@ -118,7 +132,7 @@ namespace ClassicUO.Game.UI.Gumps
                     });
 
                     _mobilesIndicator = new Texture2D(batcher.GraphicsDevice, 1, 1);
-                    _mobilesIndicator.SetData( new [] { Color.White } );
+                    _mobilesIndicator.SetData(new[] {Color.White});
                 }
 
                 int w = Width >> 1;
@@ -132,11 +146,16 @@ namespace ClassicUO.Game.UI.Gumps
                     int gx = xx - yy;
                     int gy = xx + yy;
 
-                    batcher.Draw2D(_mobilesIndicator,x + w + gx, y + h + gy, 2, 2, ShaderHuesTraslator.GetHueVector(Notoriety.GetHue(mob.NotorietyFlag)) );
+                    _hueVector.Z = 0;
+
+                    ShaderHuesTraslator.GetHueVector(ref _hueVector, Notoriety.GetHue(mob.NotorietyFlag));
+
+                    batcher.Draw2D(_mobilesIndicator, x + w + gx, y + h + gy, 2, 2, ref _hueVector);
                 }
 
                 //DRAW DOT OF PLAYER
-                batcher.Draw2D(_playerIndicator, x + w, y + h, 2, 2, Vector3.Zero);
+                ResetHueVector();
+                batcher.Draw2D(_playerIndicator, x + w, y + h, 2, 2, ref _hueVector);
             }
 
             return base.Draw(batcher, x, y);
@@ -146,34 +165,33 @@ namespace ClassicUO.Game.UI.Gumps
         {
             if (button == MouseButton.Left)
             {
-                _useLargeMap = !_useLargeMap;
-                _forceUpdate = true;
+                ToggleSize();
                 return true;
             }
+
             return false;
         }
 
-        public void ForceUpdate() => _forceUpdate = true;
+        public void ForceUpdate()
+        {
+            CreateMap();
+        }
 
-        private void CreateMiniMapTexture()
+        private void CreateMiniMapTexture(bool force = false)
         {
             if (_gumpTexture == null || _gumpTexture.IsDisposed)
                 return;
+
             ushort lastX = World.Player.Position.X;
             ushort lastY = World.Player.Position.Y;
 
-            if (_lastMap != World.MapIndex)
-            {
-                _forceUpdate = true;
-                _lastMap = World.MapIndex;
-            }
 
             if (_x != lastX || _y != lastY)
             {
                 _x = lastX;
                 _y = lastY;
             }
-            else if (!_forceUpdate)
+            else if (!force)
                 return;
 
             if (_mapTexture != null && !_mapTexture.IsDisposed)
@@ -181,7 +199,7 @@ namespace ClassicUO.Game.UI.Gumps
             int blockOffsetX = Width >> 2;
             int blockOffsetY = Height >> 2;
             int gumpCenterX = Width >> 1;
-            int gumpCenterY = Height >> 1;
+            //int gumpCenterY = Height >> 1;
 
             //0xFF080808 - pixel32
             //0x8421 - pixel16
@@ -214,14 +232,16 @@ namespace ClassicUO.Game.UI.Gumps
 
                     if (blockIndex >= maxBlockIndex)
                         break;
+
                     RadarMapBlock? mbbv = FileManager.Map.GetRadarMapBlock(World.MapIndex, i, j);
 
                     if (!mbbv.HasValue)
                         break;
+
                     RadarMapBlock mb = mbbv.Value;
                     Chunk block = World.Map.Chunks[blockIndex];
-                    int realBlockX = i * 8;
-                    int realBlockY = j * 8;
+                    int realBlockX = i << 3;
+                    int realBlockY = j << 3;
 
                     for (int x = 0; x < 8; x++)
                     {
@@ -232,7 +252,7 @@ namespace ClassicUO.Game.UI.Gumps
                             int py = realBlockY + y - lastY;
                             int gx = px - py;
                             int gy = px + py;
-                            uint color = mb.Cells[x, y].Graphic;
+                            int color = mb.Cells[x, y].Graphic;
                             bool island = mb.Cells[x, y].IsLand;
 
                             if (block != null)
@@ -246,8 +266,13 @@ namespace ClassicUO.Game.UI.Gumps
                                 {
                                     if (obj is Multi)
                                     {
-                                        color = obj.Graphic;
-                                        island = false;
+                                        if (obj.Hue == 0)
+                                        {
+                                            color = obj.Graphic;
+                                            island = false;
+                                        }
+                                        else
+                                            color = obj.Hue + 0x4000;
                                         break;
                                     }
                                 }
@@ -256,15 +281,18 @@ namespace ClassicUO.Game.UI.Gumps
                             if (!island)
                                 color += 0x4000;
                             int tableSize = 2;
-                            color = (uint) (0x8000 | FileManager.Hues.GetRadarColorData((int) color));
-                            CreatePixels(data, (int) color, gx, gy, Width, Height, table, tableSize);
+                            if(island && color > 0x4000)
+                                color = FileManager.Hues.GetColor16(16384, (ushort)(color - 0x4000));//28672 is an arbitrary position in hues.mul, is the 14 position in the range
+                            else
+                                color = FileManager.Hues.GetRadarColorData(color);
+                            CreatePixels(data, 0x8000 | color, gx, gy, Width, Height, table, tableSize);
                         }
                     }
                 }
             }
 
-            _mapTexture = new SpriteTexture(Width, Height, false);
-            _mapTexture.SetDataHitMap16(data);
+            _mapTexture = new UOTexture16(Width, Height);
+            _mapTexture.PushData(data);
         }
 
         private void CreatePixels(ushort[] data, int color, int x, int y, int w, int h, Point[] table, int count)
@@ -280,10 +308,12 @@ namespace ClassicUO.Game.UI.Gumps
 
                 if (gx < 0 || gx >= w)
                     continue;
+
                 int gy = py;
 
                 if (gy < 0 || gy >= h)
                     break;
+
                 int block = gy * w + gx;
 
                 if (data[block] == 0x8421)
@@ -291,10 +321,9 @@ namespace ClassicUO.Game.UI.Gumps
             }
         }
 
-        protected override bool Contains(int x, int y)
+        public override bool Contains(int x, int y)
         {
             return _mapTexture.Contains(x, y);
-            //return FileManager.Gumps.Contains(_useLargeMap ? (ushort) 5011 : (ushort) 5010, x, y);
         }
 
         public override void Dispose()

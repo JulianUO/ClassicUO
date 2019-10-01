@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,58 +18,57 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
+
+using ClassicUO.IO.Resources;
+using ClassicUO.Utility;
 
 namespace ClassicUO.IO
 {
     internal class UOFileUop : UOFile
     {
         private const uint UOP_MAGIC_NUMBER = 0x50594D;
-        private readonly string _extension;
+        private readonly string _pattern;
         private readonly bool _hasExtra;
-        private int _count;
+        private readonly Dictionary<ulong, UOFileIndex> _hashes = new Dictionary<ulong, UOFileIndex>();
 
-        public UOFileUop(string path, string extension, int count = 0, bool hasextra = false, bool loadentries = true) : base(path)
+        public UOFileUop(string path, string pattern, bool hasextra = false) : base(path)
         {
-            _extension = extension;
-            _count = count;
+            _pattern = pattern;
             _hasExtra = hasextra;
-            Load(loadentries);
+            Load();
         }
 
-        protected override void Load(bool loadentries = true)
+        public bool TryGetUOPData(ulong hash, out UOFileIndex data)
+            => _hashes.TryGetValue(hash, out data);
+
+        public int TotalEntriesCount { get; private set; }
+
+        protected override void Load()
         {
-            base.Load(loadentries);
+            base.Load();
+
             Seek(0);
 
             if (ReadUInt() != UOP_MAGIC_NUMBER)
                 throw new ArgumentException("Bad uop file");
-            int version = ReadInt();
-            Skip(4);
+
+            uint version = ReadUInt();
+            uint format_timestamp = ReadUInt();
             long nextBlock = ReadLong();
-            Skip(4);
+            uint block_size = ReadUInt();
             int count = ReadInt();
 
-            if (_count <= 0)
-                _count = count;
-            Entries = new UOFileIndex3D[_count];
-            Dictionary<ulong, int> hashes = new Dictionary<ulong, int>();
-            string pattern = System.IO.Path.GetFileNameWithoutExtension(FilePath).ToLowerInvariant();
-
-            for (int i = 0; i < _count; i++)
-            {
-                string file = string.Format("build/{0}/{1:D8}{2}", pattern, i, _extension);
-                ulong hash = CreateHash(file);
-
-                if (!hashes.ContainsKey(hash))
-                    hashes.Add(hash, i);
-            }
 
             Seek(nextBlock);
             int total = 0;
-
+            int real_total = 0;
             do
             {
                 int filesCount = ReadInt();
@@ -82,39 +82,84 @@ namespace ClassicUO.IO
                     int compressedLength = ReadInt();
                     int decompressedLength = ReadInt();
                     ulong hash = ReadULong();
-                    Skip(4);
+                    uint data_hash = ReadUInt();
                     short flag = ReadShort();
                     int length = flag == 1 ? compressedLength : decompressedLength;
 
                     if (offset == 0)
                         continue;
 
-                    if (hashes.TryGetValue(hash, out int idx))
+                    real_total++;
+                    offset += headerLength;
+                    if (_hasExtra)
                     {
-                        if (idx < 0 || idx > Entries.Length)
-                            throw new IndexOutOfRangeException("hashes dictionary and files collection have different count of entries!");
-                        Entries[idx] = new UOFileIndex3D(offset + headerLength, length, decompressedLength);
+                        long curpos = Position;
+                        Seek(offset);
+                        int extra1 = ReadInt();
+                        int extra2 = ReadInt();
 
-                        // extra?
-                        if (_hasExtra)
-                        {
-                            long curpos = Position;
-                            Seek(offset + headerLength);
-                            int extra1 = ReadInt();
-                            int extra2 = ReadInt();
+                        _hashes.Add(hash, new UOFileIndex(offset + 8, compressedLength - 8, decompressedLength, (extra1 << 16) | extra2));
 
-                            ref UOFileIndex3D index3D = ref Entries[idx];
-                            index3D = new UOFileIndex3D(index3D.Offset + 8, (int) (index3D.Length - 8), decompressedLength, (extra1 << 16) | extra2);
-                         
-                            Seek(curpos);
-                        }
+                        Seek(curpos);
                     }
-                    //else
-                    //    throw new ArgumentException(string.Format("File with hash {0:X8} was not found in hashes dictionary! EA Mythic changed UOP format!", hash));
+                    else
+                        _hashes.Add(hash, new UOFileIndex(offset, compressedLength, decompressedLength, 0));
                 }
 
                 Seek(nextBlock);
             } while (nextBlock != 0);
+
+            TotalEntriesCount = real_total;
+        }
+
+        public void ClearHashes()
+            => _hashes.Clear();
+
+        public override void Dispose()
+        {
+            ClearHashes();
+            base.Dispose();
+        }
+
+        public override void FillEntries(ref UOFileIndex[] entries)
+        {
+            for (int i = 0; i < entries.Length; i++)
+            {
+                string file = string.Format(_pattern, i);
+                ulong hash = CreateHash(file);
+
+                if (_hashes.TryGetValue(hash, out var data))
+                {
+                    entries[i] = data;
+                }
+            }
+        }
+
+        public void FillEntries(ref UOFileIndex[] entries, bool clearHashes)
+        {
+            FillEntries(ref entries);
+
+            if (clearHashes)
+                ClearHashes();
+        }
+
+        //public unsafe T[] GetData<T>(int compressedSize, int uncompressedSize) where T : struct
+        //{
+        //    T[] data = new T[uncompressedSize];
+        //    IntPtr destPtr = (IntPtr) UnsafeMemoryManager.AsPointer(ref data);
+        //    ZLib.Decompress(PositionAddress, compressedSize, 0, destPtr, uncompressedSize);
+
+        //    return data;
+        //}
+
+        public unsafe byte[] GetData(int compressedSize, int uncompressedSize) 
+        {
+            byte[] data = new byte[uncompressedSize];
+
+            fixed (byte* destPtr = data)
+                ZLib.Decompress(PositionAddress, compressedSize, 0, (IntPtr) destPtr, uncompressedSize);
+
+            return data;
         }
 
         internal static ulong CreateHash(string s)
@@ -150,36 +195,47 @@ namespace ClassicUO.IO
                     case 12:
                         esi += (uint) s[i + 11] << 24;
                         goto case 11;
+
                     case 11:
                         esi += (uint) s[i + 10] << 16;
                         goto case 10;
+
                     case 10:
                         esi += (uint) s[i + 9] << 8;
                         goto case 9;
+
                     case 9:
                         esi += s[i + 8];
                         goto case 8;
+
                     case 8:
                         edi += (uint) s[i + 7] << 24;
                         goto case 7;
+
                     case 7:
                         edi += (uint) s[i + 6] << 16;
                         goto case 6;
+
                     case 6:
                         edi += (uint) s[i + 5] << 8;
                         goto case 5;
+
                     case 5:
                         edi += s[i + 4];
                         goto case 4;
+
                     case 4:
                         ebx += (uint) s[i + 3] << 24;
                         goto case 3;
+
                     case 3:
                         ebx += (uint) s[i + 2] << 16;
                         goto case 2;
+
                     case 2:
                         ebx += (uint) s[i + 1] << 8;
                         goto case 1;
+
                     case 1:
                         ebx += s[i];
 

@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,23 +18,26 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System;
 using System.Linq;
 
 using ClassicUO.Input;
-using ClassicUO.IO.Resources;
+using ClassicUO.Renderer;
+
+using Microsoft.Xna.Framework;
 
 namespace ClassicUO.Game.UI.Controls
 {
     internal class Combobox : Control
     {
+        private readonly byte _font;
         private readonly Label _label;
         private readonly int _maxHeight;
         private string[] _items;
         private int _selectedIndex;
-        private readonly byte _font;
 
         public Combobox(int x, int y, int width, string[] items, int selected = -1, int maxHeight = 0, bool showArrow = true, string emptyString = "", byte font = 9)
         {
@@ -52,7 +56,7 @@ namespace ClassicUO.Game.UI.Controls
             });
             string initialText = selected > -1 ? items[selected] : emptyString;
 
-            Add(_label = new Label(initialText, false, 0x0453, font: _font, align: TEXT_ALIGN_TYPE.TS_LEFT)
+            Add(_label = new Label(initialText, false, 0x0453, font: _font)
             {
                 X = 2, Y = 5
             });
@@ -81,7 +85,7 @@ namespace ClassicUO.Game.UI.Controls
 
         internal string GetSelectedItem => _label.Text;
 
-        internal uint GetItemsLength => (uint)_items.Length;
+        internal uint GetItemsLength => (uint) _items.Length;
 
         internal void SetItemsValue(string[] items)
         {
@@ -91,16 +95,34 @@ namespace ClassicUO.Game.UI.Controls
         public event EventHandler<int> OnOptionSelected;
         public event EventHandler OnBeforeContextMenu;
 
-        protected override void OnMouseClick(int x, int y, MouseButton button)
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
+        {
+            Rectangle scissor = ScissorStack.CalculateScissors(Matrix.Identity, x, y, Width, Height);
+
+            if (ScissorStack.PushScissors(scissor))
+            {
+                batcher.EnableScissorTest(true);
+                base.Draw(batcher, x, y);
+                batcher.EnableScissorTest(false);
+                ScissorStack.PopScissors();
+            }
+
+            return true; 
+        }
+
+
+        protected override void OnMouseUp(int x, int y, MouseButton button)
         {
             OnBeforeContextMenu?.Invoke(this, null);
+
             var contextMenu = new ComboboxContextMenu(this, _items, Width, _maxHeight)
             {
-                X = ScreenCoordinateX, Y = ScreenCoordinateY
+                X = ScreenCoordinateX,
+                Y = ScreenCoordinateY
             };
             if (contextMenu.Height + ScreenCoordinateY > Engine.WindowHeight) contextMenu.Y -= contextMenu.Height + ScreenCoordinateY - Engine.WindowHeight;
             Engine.UI.Add(contextMenu);
-            base.OnMouseClick(x, y, button);
+            base.OnMouseUp(x, y, button);
         }
 
         private class ComboboxContextMenu : Control
@@ -112,17 +134,21 @@ namespace ClassicUO.Game.UI.Controls
                 _box = box;
                 ResizePic background;
                 Add(background = new ResizePic(0x0BB8));
-                Label[] labels = new Label[items.Length];
+                HoveredLabel[] labels = new HoveredLabel[items.Length];
                 var index = 0;
 
                 foreach (var item in items)
                 {
-                    var label = new HoveredLabel(item, false, 0x0453, 0x024C, font: _box._font, align: TEXT_ALIGN_TYPE.TS_LEFT)
+                    var label = new HoveredLabel(item, false, 0x0453, 0x0453, font: _box._font)
                     {
-                        X = 2, Y = index * 15, Tag = index
+                        X = 2,
+                        Y = index * 15,
+                        Tag = index,
+                        DrawBackgroundCurrentIndex = true
                     };
-                    label.MouseClick += Label_MouseClick;
+                    label.MouseUp += Label_MouseUp;
                     labels[index] = label;
+
                     index++;
                 }
 
@@ -132,10 +158,10 @@ namespace ClassicUO.Game.UI.Controls
                 if (maxHeight != 0 && totalHeight > maxHeight)
                 {
                     var scrollArea = new ScrollArea(0, 0, maxWidth + 15, maxHeight, true);
-
                     foreach (var label in labels)
                     {
                         label.Y = 0;
+                        label.Width = maxWidth;
                         scrollArea.Add(label);
                     }
 
@@ -145,7 +171,11 @@ namespace ClassicUO.Game.UI.Controls
                 else
                 {
                     foreach (var label in labels)
+                    {
+                        label.Width = maxWidth;
                         Add(label);
+                    }
+
                     background.Height = totalHeight;
                 }
 
@@ -156,12 +186,10 @@ namespace ClassicUO.Game.UI.Controls
                 ControlInfo.ModalClickOutsideAreaClosesThisControl = true;
             }
 
-            //public event EventHandler<int> OnOptionSelected;
-
-            private void Label_MouseClick(object sender, MouseEventArgs e)
+            private void Label_MouseUp(object sender, MouseEventArgs e)
             {
-                _box.SelectedIndex = (int) ((Label) sender).Tag;
-                //OnOptionSelected?.Invoke(this, (int) ((Label) sender).Tag);
+                if (e.Button == MouseButton.Left)
+                    _box.SelectedIndex = (int) ((Label) sender).Tag;
             }
         }
     }

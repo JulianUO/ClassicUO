@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,13 +18,13 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 using ClassicUO.IO.Resources;
 using ClassicUO.Utility;
@@ -36,16 +37,18 @@ namespace ClassicUO.IO
         private protected MemoryMappedViewAccessor _accessor;
         private protected MemoryMappedFile _file;
 
-        public UOFile(string filepath)
+        public UOFile(string filepath, bool loadfile = false)
         {
             FilePath = filepath;
+
+            if (loadfile)
+                Load();
         }
 
         public string FilePath { get; private protected set; }
 
-        public UOFileIndex3D[] Entries { get; protected set; }
 
-        protected virtual void Load(bool loadentries = true)
+        protected virtual void Load()
         {
             Log.Message(LogTypes.Trace, $"Loading file:\t\t{FilePath}");
 
@@ -54,6 +57,7 @@ namespace ClassicUO.IO
             if (!fileInfo.Exists)
             {
                 Log.Message(LogTypes.Error, $"{FilePath}  not exists.");
+
                 return;
             }
 
@@ -79,9 +83,12 @@ namespace ClassicUO.IO
                 }
             }
             else
-            {
                 Log.Message(LogTypes.Error, $"{FilePath}  size must be > 0");
-            }
+        }
+
+        public virtual void FillEntries(ref UOFileIndex[] entries)
+        {
+
         }
 
         public virtual void Dispose()
@@ -89,28 +96,24 @@ namespace ClassicUO.IO
             _accessor.SafeMemoryMappedViewHandle.ReleasePointer();
             _accessor.Dispose();
             _file.Dispose();
-            UnloadEntries();
             Log.Message(LogTypes.Trace, $"Unloaded:\t\t{FilePath}");
         }
 
-        public void UnloadEntries()
-        {
-            if (Entries != null)
-            {
-                Entries = null;
-            }
-        }
 
+        [MethodImpl(256)]
         internal void Fill(ref byte[] buffer, int count)
         {
-            fixed (byte* ptr = buffer)
+            byte* ptr = (byte*) PositionAddress;
+            for (int i = 0; i < count; i++)
             {
-                Buffer.MemoryCopy((byte*)PositionAddress, ptr, count, count);
+                buffer[i] = ptr[i];
             }
+            //fixed (byte* ptr = buffer) Buffer.MemoryCopy((byte*) PositionAddress, ptr, count, count);
 
             Position += count;
         }
 
+        [MethodImpl(256)]
         internal T[] ReadArray<T>(int count) where T : struct
         {
             T[] t = ReadArray<T>(Position, count);
@@ -119,6 +122,7 @@ namespace ClassicUO.IO
             return t;
         }
 
+        [MethodImpl(256)]
         internal T[] ReadArray<T>(long position, int count) where T : struct
         {
             T[] array = new T[count];
@@ -127,6 +131,7 @@ namespace ClassicUO.IO
             return array;
         }
 
+        [MethodImpl(256)]
         internal T ReadStruct<T>(long position) where T : struct
         {
             _accessor.Read(position, out T s);
@@ -134,28 +139,31 @@ namespace ClassicUO.IO
             return s;
         }
 
-        internal (int, int, bool) SeekByEntryIndex(int entryidx)
-        {
-            if (entryidx < 0 || Entries == null || entryidx >= Entries.Length)
-                return (0, 0, false);
+        //[MethodImpl(256)]
+        //internal (int, int, bool) SeekByEntryIndex(int entryidx)
+        //{
+        //    if (entryidx < 0 || Entries == null || entryidx >= Entries.Length)
+        //        return (0, 0, false);
 
-            ref readonly UOFileIndex3D e = ref Entries[entryidx];
+        //    ref readonly UOFileIndex3D e = ref Entries[entryidx];
 
-            if (e.Offset < 0) return (0, 0, false);
-            int length = e.Length & 0x7FFFFFFF;
-            int extra = e.Extra;
+        //    if (e.Offset < 0) return (0, 0, false);
 
-            if ((e.Length & (1 << 31)) != 0)
-            {
-                Verdata.File.Seek(e.Offset);
+        //    int length = e.Length & 0x7FFFFFFF;
+        //    int extra = e.Extra;
 
-                return (length, extra, true);
-            }
+        //    if ((e.Length & (1 << 31)) != 0)
+        //    {
+        //        Verdata.File.Seek(e.Offset);
 
-            if (e.Length < 0) return (0, 0, false);
-            Seek(e.Offset);
+        //        return (length, extra, true);
+        //    }
 
-            return (length, extra, false);
-        }
+        //    if (e.Length < 0) return (0, 0, false);
+
+        //    Seek(e.Offset);
+
+        //    return (length, extra, false);
+        //}
     }
 }

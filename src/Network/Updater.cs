@@ -1,16 +1,35 @@
-﻿using System;
-using System.Collections.Generic;
+﻿#region license
+
+//  Copyright (C) 2019 ClassicUO Development Community on Github
+//
+//	This project is an alternative client for the game Ultima Online.
+//	The goal of this is to develop a lightweight client considering 
+//	new technologies.  
+//      
+//  This program is free software: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License as published by
+//  the Free Software Foundation, either version 3 of the License, or
+//  (at your option) any later version.
+//
+//  This program is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#endregion
+
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Net;
-using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
-using ClassicUO.Utility;
 using ClassicUO.Utility.Logging;
 
 using Newtonsoft.Json;
@@ -18,32 +37,29 @@ using Newtonsoft.Json.Linq;
 
 namespace ClassicUO.Network
 {
-    class Updater
+    internal class Updater
     {
         private const string REPO_USER = "andreakarasho";
         private const string REPO_NAME = "ClassicUO";
         private const string API_RELEASES_LINK = "https://api.github.com/repos/{0}/{1}/releases";
 
         private readonly WebClient _client;
-        private int _countDownload;
-        private double _progress;
-        private string _currentText = string.Empty;
         private int _animIndex;
+        private int _countDownload;
+        private string _currentText = string.Empty;
+        private double _progress;
 
         static Updater()
         {
-            ServicePointManager.ServerCertificateValidationCallback = delegate
-            {
-                return true;
-            };
-            System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls | System.Net.SecurityProtocolType.Tls11 | System.Net.SecurityProtocolType.Tls12;
+            ServicePointManager.ServerCertificateValidationCallback = delegate { return true; };
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
         }
 
         public Updater()
         {
-            _client = new WebClient()
+            _client = new WebClient
             {
-                Proxy = null,
+                Proxy = null
             };
             _client.Headers.Add("User-Agent: Other");
 
@@ -52,10 +68,12 @@ namespace ClassicUO.Network
                 if (IsDownloading)
                 {
                     Console.WriteLine();
-                    Log.Message(LogTypes.Trace, $"Download finished!");
+                    Log.Message(LogTypes.Trace, "Download finished!");
                 }
-            };          
+            };
         }
+
+        public bool IsDownloading => _countDownload != 0;
 
         private void ClientOnDownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
@@ -66,12 +84,13 @@ namespace ClassicUO.Network
                 const int BLOCK_COUNT = 20;
                 const string ANIMATION = @"|/-\";
 
-                int progressBlockCount = (int)(_progress * BLOCK_COUNT);
+                int progressBlockCount = (int) (_progress * BLOCK_COUNT);
 
                 string text = $"{new string('#', progressBlockCount)}{new string('-', BLOCK_COUNT - progressBlockCount)} - {e.ProgressPercentage}% {ANIMATION[_animIndex++ % ANIMATION.Length]}";
 
                 int commonPrefixLength = 0;
                 int commonLength = Math.Min(_currentText.Length, text.Length);
+
                 while (commonPrefixLength < commonLength && text[commonPrefixLength] == _currentText[commonPrefixLength])
                     commonPrefixLength++;
 
@@ -79,6 +98,7 @@ namespace ClassicUO.Network
                 outputBuilder.Append('\b', _currentText.Length - commonPrefixLength);
                 outputBuilder.Append(text.Substring(commonPrefixLength));
                 int overlapCount = _currentText.Length - text.Length;
+
                 if (overlapCount > 0)
                 {
                     outputBuilder.Append(' ', overlapCount);
@@ -90,14 +110,12 @@ namespace ClassicUO.Network
             }
         }
 
-        public bool IsDownloading => _countDownload != 0;
 
-
-        public void Check()
-        {          
+        public bool Check()
+        {
             try
             {
-                Download();
+                return Download();
             }
             catch (Exception e)
             {
@@ -105,12 +123,14 @@ namespace ClassicUO.Network
 
                 _client.DownloadProgressChanged -= ClientOnDownloadProgressChanged;
             }
+
+            return false;
         }
 
-        private async void Download()
+        private bool Download()
         {
             if (IsDownloading)
-                return;
+                return false;
 
             Interlocked.Increment(ref _countDownload);
 
@@ -118,9 +138,14 @@ namespace ClassicUO.Network
 
             Reset();
 
-            string json = await _client.DownloadStringTaskAsync(string.Format(API_RELEASES_LINK, REPO_USER, REPO_NAME));
+            string json = _client.DownloadString(string.Format(API_RELEASES_LINK, REPO_USER, REPO_NAME));
 
             JArray data = JsonConvert.DeserializeObject<JArray>(json);
+
+#if DEV_BUILD
+            FileInfo fileLastCommit = new FileInfo(Path.Combine(Engine.ExePath, "version.txt"));
+#endif
+            
 
             foreach (JToken releaseToken in data.Children())
             {
@@ -128,10 +153,30 @@ namespace ClassicUO.Network
 
                 Log.Message(LogTypes.Trace, "Fetching: " + tagName);
 
+#if DEV_BUILD
+                if (tagName == "ClassicUO-dev-preview")
+                {
+                    bool ok = false;
+
+                    string commitID = releaseToken["target_commitish"].ToString();
+
+                    if (fileLastCommit.Exists)
+                    {
+                        string lastCommit = File.ReadAllText(fileLastCommit.FullName);
+                        ok = lastCommit != commitID;
+                    }
+
+                    File.WriteAllText(fileLastCommit.FullName, commitID);
+                    if (!ok)
+                    {
+                        break;
+                    }
+#else
                 if (Version.TryParse(tagName, out Version version) && version > Engine.Version)
                 {
                     Log.Message(LogTypes.Trace, "Found new version available: " + version);
 
+#endif
                     string name = releaseToken["name"].ToString();
                     string body = releaseToken["body"].ToString();
 
@@ -140,6 +185,7 @@ namespace ClassicUO.Network
                     if (!asset.HasValues)
                     {
                         Log.Message(LogTypes.Error, "No zip found for: " + name);
+
                         continue;
                     }
 
@@ -158,7 +204,7 @@ namespace ClassicUO.Network
 
                     _client.DownloadProgressChanged += ClientOnDownloadProgressChanged;
 
-                    await _client.DownloadFileTaskAsync(downloadUrl, zipFile);
+                    _client.DownloadFile(downloadUrl, zipFile);
 
                     Log.Message(LogTypes.Trace, assetName + "..... done");
 
@@ -170,18 +216,29 @@ namespace ClassicUO.Network
 
                     File.Delete(zipFile);
 
-                    Process currentProcess = Process.GetCurrentProcess();
-
                     string prefix = Environment.OSVersion.Platform == PlatformID.MacOSX || Environment.OSVersion.Platform == PlatformID.Unix ? "mono " : string.Empty;
 
-                    Process.Start(prefix + Path.Combine(Path.Combine(Engine.ExePath, "update-temp"), "ClassicUO.exe"), $"--source {Engine.ExePath} --pid {currentProcess.Id} --action update");
-                    currentProcess.Kill();
 
-                    break;
+                    new Process
+                    {
+                        StartInfo =
+                        {
+                            WorkingDirectory = tempPath,
+                            FileName = prefix + Path.Combine(tempPath, "ClassicUO.exe"),
+                            UseShellExecute = false,
+                            Arguments =
+                                $"--source \"{Engine.ExePath}\" --pid {Process.GetCurrentProcess().Id} --action update"
+                        }
+                    }.Start();
+
+
+                    return true;
                 }
             }
 
             Interlocked.Decrement(ref _countDownload);
+
+            return false;
         }
 
         private void Reset()
@@ -189,7 +246,6 @@ namespace ClassicUO.Network
             _progress = 0;
             _currentText = string.Empty;
             _animIndex = 0;
-
         }
     }
 }

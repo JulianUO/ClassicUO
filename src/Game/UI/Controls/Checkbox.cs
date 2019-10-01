@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,6 +18,7 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System;
@@ -36,7 +38,7 @@ namespace ClassicUO.Game.UI.Controls
         private const int INACTIVE = 0;
         private const int ACTIVE = 1;
         private readonly RenderedText _text;
-        private readonly SpriteTexture[] _textures = new SpriteTexture[2];
+        private readonly UOTexture[] _textures = new UOTexture[2];
         private bool _isChecked;
 
         public Checkbox(ushort inactive, ushort active, string text = "", byte font = 0, ushort color = 0, bool isunicode = true, int maxWidth = 0)
@@ -47,20 +49,16 @@ namespace ClassicUO.Game.UI.Controls
             if (_textures[0] == null || _textures[1] == null)
             {
                 Dispose();
+
                 return;
             }
 
-            ref SpriteTexture t = ref _textures[INACTIVE];
+            UOTexture t = _textures[INACTIVE];
             Width = t.Width;
-            //Height = t.Height;
 
-            _text = new RenderedText
-            {
-                Font = font, Hue = color, IsUnicode = isunicode, MaxWidth = maxWidth, Text = text
-            };
+            _text = RenderedText.Create(text, color, font, isunicode, maxWidth: maxWidth);
             Width += _text.Width;
 
-            
             Height = Math.Max(t.Width, _text.Height);
             CanMove = false;
             AcceptMouseInput = true;
@@ -95,19 +93,24 @@ namespace ClassicUO.Game.UI.Controls
         {
             for (int i = 0; i < _textures.Length; i++)
             {
-                if (_textures[i] != null)
-                    _textures[i].Ticks = (long) totalMS;
+                UOTexture t = _textures[i];
+
+                if (t != null)
+                    t.Ticks = (long) totalMS;
             }
 
             base.Update(totalMS, frameMS);
         }
 
-        public override bool Draw(Batcher2D batcher, int x, int y)
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
         {
             if (IsDisposed)
                 return false;
+
+            ResetHueVector();
+
             bool ok = base.Draw(batcher, x, y);
-            batcher.Draw2D(IsChecked ? _textures[ACTIVE] : _textures[INACTIVE], x, y, HueVector);
+            batcher.Draw2D(IsChecked ? _textures[ACTIVE] : _textures[INACTIVE], x, y, ref _hueVector);
             _text.Draw(batcher, x + _textures[ACTIVE].Width + 2, y);
 
             return ok;
@@ -118,12 +121,10 @@ namespace ClassicUO.Game.UI.Controls
             ValueChanged.Raise(this);
         }
 
-        protected override void OnMouseClick(int x, int y, MouseButton button)
+        protected override void OnMouseUp(int x, int y, MouseButton button)
         {
             if (button == MouseButton.Left)
-            {
                 IsChecked = !IsChecked;
-            }
         }
 
         public override void Dispose()

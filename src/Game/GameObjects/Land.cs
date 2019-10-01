@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,10 +18,14 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
+using ClassicUO.Game.Managers;
 using ClassicUO.IO;
 using ClassicUO.IO.Resources;
 
@@ -28,9 +33,9 @@ using Microsoft.Xna.Framework;
 
 namespace ClassicUO.Game.GameObjects
 {
-    internal partial class Land : GameObject
+    internal sealed partial class Land : GameObject
     {
-        public Rectangle Rectangle;
+        private static readonly Queue<Land> _pool = new Queue<Land>();
 
         public Land(Graphic graphic)
         {
@@ -39,17 +44,48 @@ namespace ClassicUO.Game.GameObjects
 
             AllowedToDraw = Graphic > 2;
 
-            AlphaHue = 255;    
+            AlphaHue = 255;
         }
 
-        protected override bool CanCreateOverheads => false;
+        public static Land Create(Graphic graphic)
+        {
+            if (_pool.Count != 0)
+            {
+                var l = _pool.Dequeue();
+                l.Graphic = graphic;
+                l.IsDestroyed = false;
+                l._tileData = null;
+                l.AlphaHue = 255;
+                l.IsStretched = l.TileData.TexID == 0 && l.TileData.IsWet;
+                l.AllowedToDraw = l.Graphic > 2;
+                l.Normals = null;
+                l.Rectangle = Rectangle.Empty;
+                l.MinZ = l.AverageZ = 0;
+                l.Texture = null;
+                l.Bounds = Rectangle.Empty;
+                return l;
+            }
+            return new Land(graphic);
+        }
+
+        public override void Destroy()
+        {
+            if (IsDestroyed)
+                return;
+
+            base.Destroy();
+            _pool.Enqueue(this);
+        }
 
         private LandTiles? _tileData;
 
+        public Vector3[] Normals;
+
+        public Rectangle Rectangle;
 
         public LandTiles TileData
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(256)]
             get
             {
                 if (!_tileData.HasValue)
@@ -64,21 +100,25 @@ namespace ClassicUO.Game.GameObjects
         public sbyte AverageZ { get; set; }
 
         public bool IsStretched { get; set; }
-
+        
         public void Calculate(int x, int y, sbyte z)
         {
-            UpdateStreched(x, y ,z);
+            UpdateStreched(x, y, z);
         }
 
         public void UpdateZ(int zTop, int zRight, int zBottom, sbyte currentZ)
         {
             if (IsStretched)
             {
-                int x = currentZ * 4 + 1;
-                int y = zTop * 4;
-                int w = zRight * 4 - x;
-                int h = zBottom * 4 + 1 - y;
-                Rectangle = new Rectangle(x, y, w, h);
+                int x = (currentZ << 2) + 1;
+                int y = (zTop << 2);
+                int w = (zRight << 2) - x;
+                int h = (zBottom << 2) + 1 - y;
+
+                Rectangle.X = x;
+                Rectangle.Y = y;
+                Rectangle.Width = w;
+                Rectangle.Height = h;
 
                 if (Math.Abs(currentZ - zRight) <= Math.Abs(zBottom - zTop))
                     AverageZ = (sbyte) ((currentZ + zRight) >> 1);
@@ -108,6 +148,7 @@ namespace ClassicUO.Game.GameObjects
             return (result + GetDirectionZ(direction >> 1)) >> 1;
         }
 
+        [MethodImpl(256)]
         private int GetDirectionZ(int direction)
         {
             switch (direction)
@@ -115,7 +156,7 @@ namespace ClassicUO.Game.GameObjects
                 case 1: return Rectangle.Bottom >> 2;
                 case 2: return Rectangle.Right >> 2;
                 case 3: return Rectangle.Top >> 2;
-                default: return Position.Z;
+                default: return Z;
             }
         }
     }

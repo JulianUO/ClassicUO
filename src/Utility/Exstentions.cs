@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,14 +18,18 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
+
+using ClassicUO.Utility.Logging;
 
 using Microsoft.Xna.Framework;
 
@@ -60,20 +65,21 @@ namespace ClassicUO.Utility
             {
                 t.Exception?.Handle(e =>
                 {
-                    try
-                    {
-                        using (StreamWriter txt = new StreamWriter("crash.log", true))
-                        {
-                            txt.AutoFlush = true;
-                            txt.WriteLine("Exception @ {0}", DateTime.Now.ToString("MM-dd-yy HH:mm:ss.ffff"));
-                            txt.WriteLine(e.ToString());
-                            txt.WriteLine("");
-                            txt.WriteLine("");
-                        }
-                    }
-                    catch
-                    {
-                    }
+                    Log.Message(LogTypes.Panic, e.ToString());
+                    //try
+                    //{
+                    //    using (StreamWriter txt = new StreamWriter("crash.log", true))
+                    //    {
+                    //        txt.AutoFlush = true;
+                    //        txt.WriteLine("Exception @ {0}", Engine.CurrDateTime.ToString("MM-dd-yy HH:mm:ss.ffff"));
+                    //        txt.WriteLine(e.ToString());
+                    //        txt.WriteLine("");
+                    //        txt.WriteLine("");
+                    //    }
+                    //}
+                    //catch
+                    //{
+                    //}
 
                     return true;
                 });
@@ -99,6 +105,7 @@ namespace ClassicUO.Utility
             foreach (T c in array) func(c);
         }
 
+        [MethodImpl(256)]
         public static bool InRect(ref Rectangle rect, ref Rectangle r)
         {
             bool inrect = false;
@@ -117,13 +124,9 @@ namespace ClassicUO.Utility
             if (inrect)
             {
                 if (rect.Y < r.Y)
-                {
                     inrect = r.Y < rect.Bottom;
-                }
                 else
-                {
                     inrect = rect.Y < r.Bottom;
-                }
             }
 
             return inrect;
@@ -132,9 +135,10 @@ namespace ClassicUO.Utility
         public static string MakeSafe(this string s)
         {
             StringBuilder sb = new StringBuilder();
+
             for (int i = 0; i < s.Length; i++)
             {
-                if (Utility.StringHelper.IsSafeChar(s[i]))
+                if (StringHelper.IsSafeChar(s[i]))
                     sb.Append(s[i]);
             }
 
@@ -151,7 +155,7 @@ namespace ClassicUO.Utility
 
         public static void WriteUTF8String(this BinaryWriter writer, string str)
         {
-            writer.Write( Encoding.UTF8.GetBytes(str));
+            writer.Write(Encoding.UTF8.GetBytes(str));
         }
     }
 }

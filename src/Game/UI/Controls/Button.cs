@@ -1,4 +1,5 @@
 #region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,10 +18,12 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System.Collections.Generic;
 
+using ClassicUO.Game.Scenes;
 using ClassicUO.Input;
 using ClassicUO.IO;
 using ClassicUO.Renderer;
@@ -44,8 +47,9 @@ namespace ClassicUO.Game.UI.Controls
         private readonly string _caption;
         private readonly RenderedText[] _fontTexture = new RenderedText[2];
         private readonly Graphic[] _gumpGraphics = new Graphic[3];
-        private readonly SpriteTexture[] _textures = new SpriteTexture[3];
-        private bool _clicked;
+        private readonly UOTexture[] _textures = new UOTexture[3];
+
+        private bool _entered;
 
         public Button(int buttonID, ushort normal, ushort pressed, ushort over = 0, string caption = "", byte font = 0, bool isunicode = true, ushort normalHue = ushort.MaxValue, ushort hoverHue = ushort.MaxValue)
         {
@@ -56,7 +60,7 @@ namespace ClassicUO.Game.UI.Controls
             _textures[NORMAL] = FileManager.Gumps.GetTexture(normal);
             _textures[PRESSED] = FileManager.Gumps.GetTexture(pressed);
             if (over > 0) _textures[OVER] = FileManager.Gumps.GetTexture(over);
-            SpriteTexture t = _textures[NORMAL];
+            UOTexture t = _textures[NORMAL];
 
             if (t == null)
             {
@@ -74,20 +78,11 @@ namespace ClassicUO.Game.UI.Controls
             {
                 _caption = caption;
 
-                _fontTexture[0] = new RenderedText
-                {
-                    IsUnicode = isunicode,
-                    Hue = FontHue,
-                    Font = font,
-                    Text = caption
-                }; 
+                _fontTexture[0] = RenderedText.Create(caption,FontHue, font, isunicode);
 
                 if (hoverHue != ushort.MaxValue)
                 {
-                    _fontTexture[1] = new RenderedText
-                    {
-                        IsUnicode = isunicode, Hue = HueHover, Font = font, Text = caption
-                    };
+                    _fontTexture[1] = RenderedText.Create(caption, HueHover, font, isunicode);
                 }
             }
 
@@ -97,7 +92,7 @@ namespace ClassicUO.Game.UI.Controls
             CanCloseWithEsc = false;
         }
 
-        public Button(List<string> parts) : this(parts.Count >= 8 ? int.Parse(parts[7]) : 0, ushort.Parse(parts[3]), ushort.Parse(parts[4]))
+        public Button(List<string> parts) : this(parts.Count >= 8 ? int.Parse(parts[7]) : 0, Graphic.Parse(parts[3]), Graphic.Parse(parts[4]))
         {
             X = int.Parse(parts[1]);
             Y = int.Parse(parts[2]);
@@ -106,16 +101,15 @@ namespace ClassicUO.Game.UI.Controls
             {
                 int action = int.Parse(parts[5]);
 
-                if (action == 0)
-                    ButtonAction = ButtonAction.SwitchPage;
-                else
-                    ButtonAction = ButtonAction.Activate;
+                ButtonAction = action == 0 ? ButtonAction.SwitchPage : ButtonAction.Activate;
             }
-            
+
             ToPage = parts.Count >= 7 ? int.Parse(parts[6]) : 0;
+            WantUpdateSize = false;
+            ContainsByBounds = true;
         }
 
-        public bool IsClicked => _clicked;
+        public bool IsClicked { get; private set; }
 
         public int ButtonID { get; }
 
@@ -132,7 +126,7 @@ namespace ClassicUO.Game.UI.Controls
             {
                 _textures[NORMAL] = FileManager.Gumps.GetTexture(value);
                 _gumpGraphics[NORMAL] = value;
-            } 
+            }
         }
 
         public ushort ButtonGraphicPressed
@@ -142,7 +136,6 @@ namespace ClassicUO.Game.UI.Controls
             {
                 _textures[PRESSED] = FileManager.Gumps.GetTexture(value);
                 _gumpGraphics[PRESSED] = value;
-
             }
         }
 
@@ -153,7 +146,6 @@ namespace ClassicUO.Game.UI.Controls
             {
                 _textures[OVER] = FileManager.Gumps.GetTexture(value);
                 _gumpGraphics[OVER] = value;
-
             }
         }
 
@@ -162,6 +154,8 @@ namespace ClassicUO.Game.UI.Controls
         public Hue HueHover { get; }
 
         public bool FontCenter { get; set; }
+
+        public bool ContainsByBounds { get; set; }
 
         public override void Update(double totalMS, double frameMS)
         {
@@ -172,12 +166,13 @@ namespace ClassicUO.Game.UI.Controls
 
             for (int i = 0; i < _textures.Length; i++)
             {
-                if (_textures[i] != null)
-                    _textures[i].Ticks = Engine.Ticks;
+                UOTexture t = _textures[i];
+
+                if (t != null)
+                    t.Ticks = Engine.Ticks;
             }
         }
 
-        private bool _entered;
         protected override void OnMouseEnter(int x, int y)
         {
             _entered = true;
@@ -188,12 +183,15 @@ namespace ClassicUO.Game.UI.Controls
             _entered = false;
         }
 
-        public override bool Draw(Batcher2D batcher, int x, int y)
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
         {
-            SpriteTexture texture = GetTextureByState();
-            batcher.Draw2D(texture, x, y, Width, Height, IsTransparent ? ShaderHuesTraslator.GetHueVector(0, false, Alpha, false) : Vector3.Zero);
+            UOTexture texture = GetTextureByState();
 
-            //Draw1(batcher, texture, new Rectangle((int) position.X, (int) position.Y, Width, Height), -1, 0, IsTransparent ? ShaderHuesTraslator.GetHueVector(0, false, 0.5f, false) : Vector3.Zero);
+            ResetHueVector();
+
+            _hueVector.Z = Alpha;
+
+            batcher.Draw2D(texture, x, y, Width, Height, ref _hueVector);
 
             if (!string.IsNullOrEmpty(_caption))
             {
@@ -201,7 +199,7 @@ namespace ClassicUO.Game.UI.Controls
 
                 if (FontCenter)
                 {
-                    int yoffset = _clicked ? 1 : 0;
+                    int yoffset = IsClicked ? 1 : 0;
                     textTexture.Draw(batcher, x + ((Width - textTexture.Width) >> 1), y + yoffset + ((Height - textTexture.Height) >> 1));
                 }
                 else
@@ -214,20 +212,40 @@ namespace ClassicUO.Game.UI.Controls
         protected override void OnMouseDown(int x, int y, MouseButton button)
         {
             if (button == MouseButton.Left)
-                _clicked = true;
+                IsClicked = true;
         }
 
         protected override void OnMouseUp(int x, int y, MouseButton button)
         {
             if (button == MouseButton.Left)
-                _clicked = false;
+            {
+                IsClicked = false;
+                if (_entered || Engine.SceneManager.CurrentScene is GameScene)
+                {
+                    switch (ButtonAction)
+                    {
+                        case ButtonAction.SwitchPage:
+                            ChangePage(ToPage);
+
+                            break;
+
+                        case ButtonAction.Activate:
+                            OnButtonClick(ButtonID);
+
+                            break;
+                    }
+
+                    Mouse.LastLeftButtonClickTime = 0;
+                    Mouse.CancelDoubleClick = true;
+                }
+            }
         }
 
-        private SpriteTexture GetTextureByState()
+        private UOTexture GetTextureByState()
         {
-            if (_entered)
+            if (_entered || IsClicked)
             {
-                if (_clicked && _textures[PRESSED] != null)
+                if (IsClicked && _textures[PRESSED] != null)
                     return _textures[PRESSED];
 
                 if (_textures[OVER] != null)
@@ -241,7 +259,7 @@ namespace ClassicUO.Game.UI.Controls
         {
             if (_entered)
             {
-                if (_clicked && _textures[PRESSED] != null)
+                if (IsClicked && _textures[PRESSED] != null)
                     return _gumpGraphics[PRESSED];
 
                 if (_textures[OVER] != null)
@@ -251,37 +269,21 @@ namespace ClassicUO.Game.UI.Controls
             return _gumpGraphics[NORMAL];
         }
 
-        protected override void OnMouseClick(int x, int y, MouseButton button)
+
+      
+        public override bool Contains(int x, int y)
         {
-            if (button == MouseButton.Left)
-            {
-                switch (ButtonAction)
-                {
-                    case ButtonAction.SwitchPage:
-                        ChangePage(ToPage);
+            if (IsDisposed)
+                return false;
 
-                        break;
-                    case ButtonAction.Activate:
-                        OnButtonClick(ButtonID);
-
-                        break;
-                }
-
-                Mouse.LastLeftButtonClickTime = 0;
-                Mouse.CancelDoubleClick = true;
-            }
+            return ContainsByBounds ? base.Contains(x, y) : _textures[NORMAL].Contains(x, y);
         }
 
-        public bool ContainsByBounds { get; set; }
-
-        protected override bool Contains(int x, int y)
+        public sealed override void Dispose()
         {
-            return ContainsByBounds || IsDisposed ? base.Contains(x, y) : _textures[NORMAL].Contains(x, y);
-        }
+            foreach (RenderedText t in _fontTexture)
+                t?.Destroy();
 
-        public override void Dispose()
-        {
-            for (int i = 0; i < _fontTexture.Length; i++) _fontTexture[i]?.Destroy();
             base.Dispose();
         }
     }

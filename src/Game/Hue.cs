@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,7 +18,9 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
 using System.Globalization;
 
@@ -29,9 +32,11 @@ namespace ClassicUO.Game
         {
             return _value == other._value;
         }
- 
+
         public const ushort INVALID = 0xFFFF;
-       
+
+        public const ushort ZERO = 0;
+
         private readonly ushort _value;
 
         public Hue(ushort hue)
@@ -84,7 +89,7 @@ namespace ClassicUO.Game
 
         public override string ToString()
         {
-            return $"0x{_value:X4}";
+            return $"{_value} (0x{_value:X4})";
         }
 
         public override int GetHashCode()
@@ -94,7 +99,15 @@ namespace ClassicUO.Game
 
         public static Hue Parse(string str)
         {
-            return str.StartsWith("0x") ? ushort.Parse(str.Remove(0, 2), NumberStyles.HexNumber) : ushort.Parse(str);
+            if (str.StartsWith("0x"))
+                return ushort.Parse(str.Remove(0, 2), NumberStyles.HexNumber);
+
+            if (str.Length > 1 && str[0] == '-')
+                return (ushort)short.Parse(str);
+
+            if (uint.TryParse(str, out var h)) // some server send 0xFFFF_FFFF in decimal form. C# doesn't like it. It needs a specific conversion)
+                return (ushort) h;
+            return 0;
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,22 +18,23 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
-using System.Diagnostics;
-using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Security;
 
 namespace ClassicUO.IO
 {
     /// <summary>
-    /// A fast Little Endian data reader.
+    ///     A fast Little Endian data reader.
     /// </summary>
     internal unsafe class DataReader
     {
         private byte* _data;
+
+        private GCHandle _handle;
 
         internal long Position { get; set; }
 
@@ -42,15 +44,15 @@ namespace ClassicUO.IO
 
         internal IntPtr PositionAddress => (IntPtr) (_data + Position);
 
-        private GCHandle _handle;
 
-
+        [MethodImpl(256)]
         public void ReleaseData()
         {
             if (_handle.IsAllocated)
                 _handle.Free();
         }
 
+        [MethodImpl(256)]
         internal void SetData(byte* data, long length)
         {
             ReleaseData();
@@ -60,46 +62,52 @@ namespace ClassicUO.IO
             Position = 0;
         }
 
+        [MethodImpl(256)]
         internal void SetData(byte[] data, long length)
         {
             //fixed (byte* d = data)
             //    SetData(d, length);
             ReleaseData();
             _handle = GCHandle.Alloc(data, GCHandleType.Pinned);
-            _data = (byte*)_handle.AddrOfPinnedObject();
+            _data = (byte*) _handle.AddrOfPinnedObject();
             Length = length;
             Position = 0;
         }
 
+        [MethodImpl(256)]
         internal void SetData(IntPtr data, long length)
         {
             SetData((byte*) data, length);
         }
 
+        [MethodImpl(256)]
         internal void SetData(IntPtr data)
         {
             SetData((byte*) data, Length);
         }
 
+        [MethodImpl(256)]
         internal void Seek(long idx)
         {
             Position = idx;
             EnsureSize(0);
         }
 
+        [MethodImpl(256)]
         internal void Seek(int idx)
         {
             Position = idx;
             EnsureSize(0);
         }
 
+        [MethodImpl(256)]
         internal void Skip(int count)
         {
             EnsureSize(count);
             Position += count;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(256)]
         internal byte ReadByte()
         {
             EnsureSize(1);
@@ -107,36 +115,41 @@ namespace ClassicUO.IO
             return _data[Position++];
         }
 
+        [MethodImpl(256)]
         internal sbyte ReadSByte()
         {
             return (sbyte) ReadByte();
         }
 
+        [MethodImpl(256)]
         internal bool ReadBool()
         {
             return ReadByte() != 0;
         }
 
+        [MethodImpl(256)]
         internal short ReadShort()
         {
             EnsureSize(2);
 
-            short v = *(short*)(_data + Position);
+            short v = *(short*) (_data + Position);
             Position += 2;
 
             return v;
         }
 
+        [MethodImpl(256)]
         internal ushort ReadUShort()
         {
             EnsureSize(2);
 
-            ushort v = *(ushort*)(_data + Position);
+            ushort v = *(ushort*) (_data + Position);
             Position += 2;
 
             return v;
         }
 
+        [MethodImpl(256)]
         internal int ReadInt()
         {
             EnsureSize(4);
@@ -148,17 +161,19 @@ namespace ClassicUO.IO
             return v;
         }
 
+        [MethodImpl(256)]
         internal uint ReadUInt()
         {
             EnsureSize(4);
 
-            uint v = *(uint*)(_data + Position);
+            uint v = *(uint*) (_data + Position);
 
             Position += 4;
 
             return v;
         }
 
+        [MethodImpl(256)]
         internal long ReadLong()
         {
             EnsureSize(8);
@@ -170,17 +185,19 @@ namespace ClassicUO.IO
             return v;
         }
 
+        [MethodImpl(256)]
         internal ulong ReadULong()
         {
             EnsureSize(8);
 
-            ulong v = *(ulong*)(_data + Position);
+            ulong v = *(ulong*) (_data + Position);
 
             Position += 8;
 
             return v;
         }
 
+        [MethodImpl(256)]
         internal byte[] ReadArray(int count)
         {
             EnsureSize(count);
@@ -195,11 +212,28 @@ namespace ClassicUO.IO
             return data;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(256)]
         private void EnsureSize(int size)
         {
             if (Position + size > Length)
                 throw new IndexOutOfRangeException();
+        }
+
+
+        [MethodImpl(256)]
+        public ushort ReadUShortReversed()
+        {
+            EnsureSize(2);
+
+            return (ushort)((ReadByte() << 8) | ReadByte());
+        }
+
+        [MethodImpl(256)]
+        public uint ReadUIntReversed()
+        {
+            EnsureSize(4);
+
+            return (uint)((ReadByte() << 24) | (ReadByte() << 16) | (ReadByte() << 8) | ReadByte());
         }
     }
 }

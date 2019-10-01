@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,17 +18,32 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
+using System;
 
 using ClassicUO.Game.UI.Gumps;
 using ClassicUO.Renderer;
+
 using Microsoft.Xna.Framework;
-using System;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace ClassicUO.Game.UI.Controls
 {
     internal class Line : Control
     {
+        private readonly Texture2D _texture;
+
+        public Line(int x, int y, int w, int h, uint color)
+        {
+            X = x;
+            Y = y;
+            Width = w;
+            Height = h;
+            _texture = Textures.GetTexture(new Color() { PackedValue = color });
+        }
+
         internal static int CreateRectangleArea(Gump g, int startx, int starty, int width, int height, int topage = 0, uint linecolor = 0xAFAFAF, int linewidth = 1, string toplabel = null, ushort textcolor = 999, byte textfont = 0xFF)
         {
             if (!string.IsNullOrEmpty(toplabel))
@@ -37,6 +53,7 @@ namespace ClassicUO.Game.UI.Controls
                 l.X = startx + rwidth + 2;
                 l.Y = Math.Max(0, starty - ((l.Height + 1) >> 1));
                 g.Add(l, topage);
+
                 if (rwidth > 0)
                 {
                     g.Add(new Line(startx, starty, rwidth, linewidth, linecolor), topage);
@@ -44,46 +61,26 @@ namespace ClassicUO.Game.UI.Controls
                 }
             }
             else
-            {
                 g.Add(new Line(startx, starty, width, linewidth, linecolor), topage);
-            }
+
             g.Add(new Line(startx, starty, linewidth, height, linecolor), topage);
             g.Add(new Line(startx + width - 1, starty, linewidth, height, linecolor), topage);
             g.Add(new Line(startx, starty + height - 1, width, linewidth, linecolor), topage);
+
             return starty + height;
-        }
-
-        private readonly SpriteTexture _texture;
-
-        public Line(int x, int y, int w, int h, uint color)
-        {
-            X = x;
-            Y = y;
-            Width = w;
-            Height = h;
-            _texture = new SpriteTexture(1, 1);
-
-            _texture.SetData(new uint[1]
-            {
-                color
-            });
         }
 
         public override void Update(double totalMS, double frameMS)
         {
             base.Update(totalMS, frameMS);
-            _texture.Ticks = (long)totalMS;
         }
 
-        public override bool Draw(Batcher2D batcher, int x, int y)
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
         {
-            return batcher.Draw2D(_texture, x, y, Width, Height, ShaderHuesTraslator.GetHueVector(0, false, IsTransparent ? Alpha : 0, false));
-        }
+            ResetHueVector();
+            ShaderHuesTraslator.GetHueVector(ref _hueVector, 0, false, Alpha);
 
-        public override void Dispose()
-        {
-            _texture?.Dispose();
-            base.Dispose();
+            return batcher.Draw2D(_texture, x, y, Width, Height, ref _hueVector);
         }
     }
 }

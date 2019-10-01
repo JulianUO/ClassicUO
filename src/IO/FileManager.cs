@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,13 +18,19 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
-using ClassicUO.Configuration;
 using ClassicUO.Game;
+using ClassicUO.Game.Data;
+using ClassicUO.Game.Managers;
 using ClassicUO.IO.Resources;
 using ClassicUO.Utility.Logging;
 
@@ -40,19 +47,110 @@ namespace ClassicUO.IO
             {
                 _uofolderpath = value;
 
-                if (!Version.TryParse(Engine.GlobalSettings.ClientVersion.Replace(",", ".").Trim(), out Version version))
+                string[] vers = Engine.GlobalSettings.ClientVersion.ToLower().Split('.');
+                bool automatically = false;
+                if (vers.Length < 3)
                 {
-                    Log.Message(LogTypes.Error, "Wrong version.");
+                    Log.Message(LogTypes.Warning, "Client version not found");
 
-                    throw new InvalidDataException("Wrong version");
+                    DirectoryInfo dirInfo = new DirectoryInfo(Engine.GlobalSettings.UltimaOnlineDirectory);
+                    bool ok = false;
+                    if (dirInfo.Exists)
+                    {
+                        var clientInfo = dirInfo.GetFiles("client.exe", SearchOption.TopDirectoryOnly).FirstOrDefault();
+
+                        if (clientInfo != null)
+                        {
+                            var versInfo = FileVersionInfo.GetVersionInfo(clientInfo.FullName);
+
+                            Engine.GlobalSettings.ClientVersion = versInfo.FileVersion.Replace(',', '.').Replace(" ", "");
+                            vers = Engine.GlobalSettings.ClientVersion.ToLower().Split('.');
+
+                            automatically = true;
+                            ok = true;
+                        }
+                    }
+
+                    if (!ok)
+                    {
+                        Log.Message(LogTypes.Error, "Invalid UO version.");
+
+                        throw new InvalidDataException("Invalid UO version");
+                    }
                 }
 
-                ClientVersion = (ClientVersions) ((version.Major << 24) | (version.Minor << 16) | (version.Build << 8) | version.Revision);
-                Log.Message(LogTypes.Trace, $"Client version: {version} - {ClientVersion}");
+                int major = int.Parse(vers[0]);
+                int minor = int.Parse(vers[1]);
+                int extra = 0;
+
+                if (!int.TryParse(vers[2], out int build))
+                {
+                    int index = vers[2].IndexOf('.');
+
+                    if (index != -1)
+                    {
+                        build = int.Parse(vers[2].Substring(0, index));
+                    }
+                    else
+                    {
+                        int i = 0;
+
+                        for (; i < vers[2].Length; i++)
+                        {
+                            if (!char.IsNumber(vers[2][i]))
+                            {
+                                build = int.Parse(vers[2].Substring(0, i));
+                                break;
+                            }
+                        }
+
+                        if (i < vers[2].Length)
+                        {
+                            extra = (sbyte) vers[2].Substring(i, vers[2].Length - i)[0];
+
+                            char start = 'a';
+                            index = 0;
+                            while (start != extra && start <= 'z')
+                            {
+                                start++;
+                                index++;
+                            }
+
+                            extra = index;
+                        }
+                    }
+                }
+
+                if (vers.Length > 3)
+                    extra = int.Parse(vers[3]);
+
+
+                ClientVersion = (ClientVersions) (((major & 0xFF) << 24) | ((minor & 0xFF) << 16) | ((build & 0xFF) << 8) | (extra & 0xFF));
+                Log.Message(LogTypes.Trace, $"Client version: {Engine.GlobalSettings.ClientVersion} - {ClientVersion} {(automatically ? "[automatically found]" : "")}");
+
+                ClientFlags = ClientFlags.CF_T2A;
+
+                if (ClientVersion >= ClientVersions.CV_200)
+                    ClientFlags |= ClientFlags.CF_RE;
+                if (ClientVersion >= ClientVersions.CV_300)
+                    ClientFlags |= ClientFlags.CF_TD;
+                if (ClientVersion >= ClientVersions.CV_308)
+                    ClientFlags |= ClientFlags.CF_LBR;
+                if (ClientVersion >= ClientVersions.CV_308Z)
+                    ClientFlags |= ClientFlags.CF_AOS;
+                if (ClientVersion >= ClientVersions.CV_405A)
+                    ClientFlags |= ClientFlags.CF_SE;
+                if (ClientVersion >= ClientVersions.CV_60144)
+                    ClientFlags |= ClientFlags.CF_SA;
+
+                Log.Message(LogTypes.Trace, "Client flags by version: " + ClientFlags);
+                Log.Message(LogTypes.Trace, "UOP? " + (IsUOPInstallation ? "yes" : "no"));
             }
         }
 
         public static ClientVersions ClientVersion { get; private set; }
+
+        public static ClientFlags ClientFlags { get; private set; }
 
         public static bool IsUOPInstallation => ClientVersion >= ClientVersions.CV_70240;
 
@@ -66,7 +164,7 @@ namespace ClassicUO.IO
         public static MapLoader Map { get; private set; }
         public static ClilocLoader Cliloc { get; private set; }
         public static GumpsLoader Gumps { get; private set; }
-        public static FontsLoader Fonts { get; private set; }    
+        public static FontsLoader Fonts { get; private set; }
         public static HuesLoader Hues { get; private set; }
         public static TileDataLoader TileData { get; private set; }
         public static MultiLoader Multi { get; private set; }
@@ -82,58 +180,101 @@ namespace ClassicUO.IO
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
 
-            //new AnimationsLoader2().Load();
+            List<Task> tasks = new List<Task>();
 
             Animations = new AnimationsLoader();
-            Animations.Load();
+            tasks.Add(Animations.Load());
 
             AnimData = new AnimDataLoader();
-            AnimData.Load();
+            tasks.Add(AnimData.Load());
 
             Art = new ArtLoader();
-            Art.Load();
+            tasks.Add(Art.Load());
 
             Map = new MapLoader();
-            Map.Load();
+            tasks.Add(Map.Load());
 
             Cliloc = new ClilocLoader();
-            Cliloc.Load();
+            tasks.Add(Cliloc.Load(Engine.GlobalSettings.ClilocFile));
 
             Gumps = new GumpsLoader();
-            Gumps.Load();
+            tasks.Add(Gumps.Load());
 
             Fonts = new FontsLoader();
-            Fonts.Load();
+            tasks.Add(Fonts.Load());
 
             Hues = new HuesLoader();
-            Hues.Load();
+            tasks.Add(Hues.Load());
 
             TileData = new TileDataLoader();
-            TileData.Load();
+            tasks.Add(TileData.Load());
 
             Multi = new MultiLoader();
-            Multi.Load();
+            tasks.Add(Multi.Load());
 
             Skills = new SkillsLoader();
-            Skills.Load();
+            tasks.Add(Skills.Load());
 
             Textmaps = new TexmapsLoader();
-            Textmaps.Load();
+            tasks.Add(Textmaps.Load());
 
             Speeches = new SpeechesLoader();
-            Speeches.Load();
+            tasks.Add(Speeches.Load());
 
             Lights = new LightsLoader();
-            Lights.Load();
+            tasks.Add(Lights.Load());
 
             Sounds = new SoundsLoader();
-            Sounds.Load();
+            tasks.Add(Sounds.Load());
 
             Multimap = new MultiMapLoader();
-            Multimap.Load();
+            tasks.Add(Multimap.Load());
 
             Profession = new ProfessionLoader();
-            Profession.Load();
+            tasks.Add(Profession.Load());
+
+
+            if (!Task.WhenAll(tasks).Wait(TimeSpan.FromSeconds(10)))
+            {
+                Log.Message(LogTypes.Panic, "Loading files timeout.");
+            }
+
+            var verdata = Verdata.File;
+
+            if (verdata != null && Verdata.Patches.Length != 0)
+            {
+                for (int i = 0; i < Verdata.Patches.Length; i++)
+                {
+                    ref readonly UOFileIndex5D vh = ref Verdata.Patches[i];
+
+                    if (vh.FileID == 0)
+                        Map.PatchMapBlock(vh.BlockID, vh.Position);
+                    else if (vh.FileID == 4)
+                    {
+                        if (vh.BlockID >= Constants.MAX_LAND_DATA_INDEX_COUNT)
+                        {
+                            ushort id = (ushort) (vh.BlockID - Constants.MAX_LAND_DATA_INDEX_COUNT);
+                        }
+                    }
+                    else if (vh.FileID == 12)
+                    {
+                    }
+                    else if (vh.FileID == 14 && vh.BlockID < Multi.Count)
+                    {
+                    }
+                    else if (vh.FileID == 16 && vh.BlockID < Skills.SkillsCount)
+                    {
+                    }
+                    else if (vh.FileID == 30)
+                    {
+                    }
+                    else if (vh.FileID == 32)
+                    {
+                    }
+                }
+            }
+
+            SkillsGroupManager.LoadDefault();
 
             Log.Message(LogTypes.Trace, $"Files loaded in: {stopwatch.ElapsedMilliseconds} ms!");
             stopwatch.Stop();

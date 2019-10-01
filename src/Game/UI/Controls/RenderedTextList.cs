@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,11 +18,15 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
+using System;
 
 using ClassicUO.IO.Resources;
 using ClassicUO.Renderer;
 using ClassicUO.Utility;
+using ClassicUO.Utility.Collections;
 using ClassicUO.Utility.Logging;
 
 using Microsoft.Xna.Framework;
@@ -30,7 +35,7 @@ namespace ClassicUO.Game.UI.Controls
 {
     internal class RenderedTextList : Control
     {
-        private readonly Deque<RenderedText> _entries;
+        private readonly Deque<RenderedText> _entries, _hours;
         private readonly IScrollBar _scrollBar;
 
         public RenderedTextList(int x, int y, int width, int height, IScrollBar scrollBarControl)
@@ -44,9 +49,12 @@ namespace ClassicUO.Game.UI.Controls
             Width = width;
             Height = height;
             _entries = new Deque<RenderedText>();
+            _hours = new Deque<RenderedText>();
+
+            WantUpdateSize = false;
         }
 
-        public override bool Draw(Batcher2D batcher, int x, int y)
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
         {
             base.Draw(batcher, x, y);
 
@@ -58,35 +66,41 @@ namespace ClassicUO.Game.UI.Controls
 
             for (int i = 0; i < _entries.Count; i++)
             {
-                if (height + _entries[i].Height <= _scrollBar.Value)
+                var t = _entries[i];
+                var hour = _hours[i];
+
+                if (height + t.Height <= _scrollBar.Value)
                 {
                     // this entry is above the renderable area.
-                    height += _entries[i].Height;
+                    height += t.Height;
                 }
-                else if (height + _entries[i].Height <= maxheight)
+                else if (height + t.Height <= maxheight)
                 {
                     int yy = height - _scrollBar.Value;
 
                     if (yy < 0)
                     {
                         // this entry starts above the renderable area, but exists partially within it.
-                        _entries[i].Draw(batcher, mx, y, _entries[i].Width, _entries[i].Height + yy, 0, -yy);
-                        my += _entries[i].Height + yy;
+                        hour.Draw(batcher, mx, y, t.Width, t.Height + yy, 0, -yy);
+                        t.Draw(batcher, mx + hour.Width, y, t.Width, t.Height + yy, 0, -yy);
+                        my += t.Height + yy;
                     }
                     else
                     {
                         // this entry is completely within the renderable area.
-                        _entries[i].Draw(batcher, mx, my);
-                        my += _entries[i].Height;
+                        hour.Draw(batcher, mx, my);
+                        t.Draw(batcher, mx + hour.Width, my);
+                        my += t.Height;
                     }
 
-                    height += _entries[i].Height;
+                    height += t.Height;
                 }
                 else
                 {
                     int yyy = maxheight - height;
-                    _entries[i].Draw(batcher, mx, y + _scrollBar.Height - yyy, _entries[i].Width, yyy, 0, 0);
-
+                    hour.Draw(batcher, mx, y + _scrollBar.Height - yyy, t.Width, yyy, 0, 0);
+                    t.Draw(batcher, mx + hour.Width, y + _scrollBar.Height - yyy, t.Width, yyy, 0, 0);
+                   
                     // can't fit any more entries - so we break!
                     break;
                 }
@@ -98,7 +112,7 @@ namespace ClassicUO.Game.UI.Controls
         public override void Update(double totalMS, double frameMS)
         {
             base.Update(totalMS, frameMS);
-            _scrollBar.Location = new Point(X + Width - 19, Y);
+            _scrollBar.X = X + Width - (_scrollBar.Width >> 1) + 5;
             _scrollBar.Height = Height;
             CalculateScrollBarMaxValue();
             _scrollBar.IsVisible = _scrollBar.MaxValue > _scrollBar.MinValue;
@@ -108,7 +122,10 @@ namespace ClassicUO.Game.UI.Controls
         {
             bool maxValue = _scrollBar.Value == _scrollBar.MaxValue;
             int height = 0;
-            for (int i = 0; i < _entries.Count; i++) height += _entries[i].Height;
+
+            foreach (RenderedText t in _entries)
+                height += t.Height;
+
             height -= _scrollBar.Height;
 
             if (height > 0)
@@ -129,21 +146,18 @@ namespace ClassicUO.Game.UI.Controls
         {
             bool maxScroll = _scrollBar.Value == _scrollBar.MaxValue;
 
-            while (_entries.Count > 99)
+            while (_entries.Count > 199)
             {
                 _entries.RemoveFromFront().Destroy();
+                _hours.RemoveFromFront().Destroy();
             }
 
-            _entries.AddToBack(new RenderedText
-            {
-                MaxWidth = Width - 18,
-                IsUnicode = isUnicode,
-                Align = TEXT_ALIGN_TYPE.TS_LEFT,
-                FontStyle = FontStyle.Indention | FontStyle.BlackBorder,
-                Hue = hue,
-                Font = (byte)font,
-                Text = text
-            });
+            RenderedText h = RenderedText.Create($"{Engine.CurrDateTime:t} ", 1150, 1, true, FontStyle.BlackBorder);
+
+            _hours.AddToBack(h);
+
+            _entries.AddToBack(RenderedText.Create(text, hue, (byte) font, isUnicode, FontStyle.Indention | FontStyle.BlackBorder, maxWidth: Width - (18 + h.Width)));
+
             _scrollBar.MaxValue += _entries[_entries.Count - 1].Height;
             if (maxScroll) _scrollBar.Value = _scrollBar.MaxValue;
         }
@@ -163,7 +177,9 @@ namespace ClassicUO.Game.UI.Controls
 
         public override void Dispose()
         {
-            for (int i = 0; i < _entries.Count; i++) _entries[i]?.Destroy();
+            foreach (RenderedText t in _entries)
+                t?.Destroy();
+
             base.Dispose();
         }
     }

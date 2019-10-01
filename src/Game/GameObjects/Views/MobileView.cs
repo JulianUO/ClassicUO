@@ -1,4 +1,5 @@
 #region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,433 +18,497 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
 using System.Collections.Generic;
 
-using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
-using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
 using ClassicUO.Game.Scenes;
-using ClassicUO.Game.UI.Gumps;
-using ClassicUO.Input;
 using ClassicUO.IO;
 using ClassicUO.IO.Resources;
 using ClassicUO.Renderer;
-using ClassicUO.Utility.Logging;
-
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 
 namespace ClassicUO.Game.GameObjects
 {
     internal partial class Mobile
     {
-        public override bool Draw(Batcher2D batcher, Vector3 position, MouseOverList objectList)
+        private static ushort _viewHue;
+        private static EquipConvData? _equipConvData;
+        private static bool _transform;
+        private static int _characterFrameStartY;
+        private static int _startCharacterWaistY;
+        private static int _startCharacterKneesY;
+        private static int _startCharacterFeetY;
+        private static int _characterFrameHeight;
+      
+
+        public byte HitsPercentage { get; set; }
+        public RenderedText HitsTexture { get; set; }
+
+        public void UpdateHits(byte perc)
         {
-            if (IsDestroyed)
-                return false;
-
-            bool mirror = false;
-            byte dir = (byte)GetDirectionForAnimation();
-            FileManager.Animations.GetAnimDirection(ref dir, ref mirror);
-            IsFlipped = mirror;
-
-            if (Graphic == 0)
-                return false;
-
-
-            /*if (_frames[0].IsSitting)
+            if (perc != HitsPercentage || (HitsTexture == null || HitsTexture.IsDestroyed))
             {
-                int x1 = 0, y1 = 0;
-                FileManager.Animations.FixSittingDirection(ref dir, ref mirror, ref x1, ref y1);
-            }*/
+                HitsPercentage = perc;
 
-            FrameInfo = Rectangle.Empty;
-            Rectangle rect = Rectangle.Empty;
+                ushort color = 0x0044;
 
-            Hue hue = 0, targetColor = 0;
-            if (Engine.Profile.Current.HighlightMobilesByFlags)
+                if (perc < 30)
+                    color = 0x0021;
+                else if (perc < 50)
+                    color = 0x0030;
+                else if (perc < 80)
+                    color = 0x0058;
+
+                HitsTexture?.Destroy();
+                HitsTexture = RenderedText.Create($"[{perc}%]", color, 3, false);
+            }
+        }
+
+        public override bool Draw(UltimaBatcher2D batcher, int posX, int posY)
+        {
+            //if (IsDestroyed)
+            //    return false;
+
+            ResetHueVector();
+
+            DrawCharacter(batcher, posX, posY);
+
+            Engine.DebugInfo.MobilesRendered++;
+
+            return true;
+        }
+
+        private void DrawCharacter(UltimaBatcher2D batcher, int posX, int posY)
+        {
+            _equipConvData = null;
+            _transform = false;
+            FileManager.Animations.SittingValue = 0;
+            FrameInfo.X = 0;
+            FrameInfo.Y = 0;
+            FrameInfo.Width = 0;
+            FrameInfo.Height = 0;
+
+            int drawX = posX + (int) Offset.X;
+            int drawY = (int) (posY + Offset.Y - Offset.Z - 3);
+
+            bool hasShadow = !IsDead && !IsHidden && Engine.Profile.Current.ShadowsEnabled;
+
+            if (Engine.AuraManager.IsEnabled)
             {
-                if (IsPoisoned)
-                    hue = 0x0044;
-
-                if (IsParalyzed)
-                    hue = 0x014C;
-
-                if (NotorietyFlag != NotorietyFlag.Invulnerable && IsYellowHits)
-                    hue = 0x0030;
+                Engine.AuraManager.Draw(batcher, drawX + 22, drawY + 22, Engine.Profile.Current.PartyAura && World.Party.Contains(this) ? Engine.Profile.Current.PartyAuraHue : (ushort)Notoriety.GetHue(NotorietyFlag));
             }
 
-            bool isAttack = Serial == World.LastAttack;
-            bool isUnderMouse = IsSelected && (TargetManager.IsTargeting || World.Player.InWarMode);
-            bool needHpLine = false;
+            bool isHuman = IsHuman;
 
-            if (this != World.Player && (isAttack || isUnderMouse || TargetManager.LastGameObject == Serial))
+
+            if (Engine.Profile.Current.HighlightGameObjects && SelectedObject.LastObject == this)
             {
-                targetColor = Notoriety.GetHue(NotorietyFlag);
+                _viewHue = 0x0023;
+                HueVector.Y = 1;
+            }
+            else if (Engine.Profile.Current.NoColorObjectsOutOfRange && Distance > World.ClientViewRange)
+            {
+                _viewHue = Constants.OUT_RANGE_COLOR;
+                HueVector.Y = 1;
+            }
+            else if (World.Player.IsDead && Engine.Profile.Current.EnableBlackWhiteEffect)
+            {
+                _viewHue = Constants.DEAD_RANGE_COLOR;
+                HueVector.Y = 1;
+            }
+            else if (IsHidden)
+                _viewHue = 0x038E;
+            else if (SelectedObject.HealthbarObject == this)
+                _viewHue = Notoriety.GetHue(NotorietyFlag);
+            else
+            {
+                _viewHue = 0;
 
-                if (isAttack || this == TargetManager.LastGameObject)
+                if (IsDead)
+                {
+                    if (!isHuman)
+                        _viewHue = 0x0386;
+                }
+                else if (Engine.Profile.Current.HighlightMobilesByFlags)
+                {
+                    if (IsPoisoned)
+                        _viewHue = Engine.Profile.Current.PoisonHue;
+
+                    if (IsParalyzed)
+                        _viewHue = Engine.Profile.Current.ParalyzedHue;
+
+                    if (NotorietyFlag != NotorietyFlag.Invulnerable && IsYellowHits)
+                        _viewHue = Engine.Profile.Current.InvulnerableHue;
+                }
+            }
+
+
+            bool isAttack = Serial == TargetManager.LastAttack;
+            bool isUnderMouse = SelectedObject.LastObject == this && TargetManager.IsTargeting;
+            //bool needHpLine = false;
+
+            if (this != World.Player && (isAttack || isUnderMouse || TargetManager.LastTarget == Serial))
+            {
+                Hue targetColor = Notoriety.GetHue(NotorietyFlag);
+
+                if (isAttack || this == TargetManager.LastTarget)
                 {
                     Engine.UI.SetTargetLineGump(this);
-                    needHpLine = true;
+                    //needHpLine = true;
                 }
 
                 if (isAttack || isUnderMouse)
-                    hue = targetColor;
+                    _viewHue = targetColor;
             }
 
-            bool drawShadow = !IsDead && !IsHidden;
 
-            DrawBody(batcher, position, objectList, dir, out int drawX, out int drawY, out int drawCenterY, ref rect, ref mirror, hue, drawShadow);
+            bool mirror = false;
 
-            if (IsHuman)
-            {
-                DrawEquipment(batcher, position, objectList, dir, ref drawX, ref drawY, ref drawCenterY, ref rect, ref mirror, hue);
-            }
+            ProcessSteps(out byte dir);
 
-            FrameInfo.X = Math.Abs(rect.X);
-            FrameInfo.Y = Math.Abs(rect.Y);
-            FrameInfo.Width = FrameInfo.X + rect.Width;
-            FrameInfo.Height = FrameInfo.Y + rect.Height;
+            FileManager.Animations.GetAnimDirection(ref dir, ref mirror);
+            IsFlipped = mirror;
 
-
-            //if (_edge == null)
-            //{
-            //    _edge = new Texture2D(batcher.GraphicsDevice, 1, 1);
-            //    _edge.SetData(new Color[] { Color.LightBlue });
-            //}
-
-            //batcher.DrawRectangle(_edge, GetOnScreenRectangle(), Vector3.Zero);
-            Engine.DebugInfo.MobilesRendered++;
-            return true;
-        }
-        //private static Texture2D _edge;
-
-        private void DrawBody(Batcher2D batcher, Vector3 position, MouseOverList objecList, byte dir, out int drawX, out int drawY, out int drawCenterY, ref Rectangle rect, ref bool mirror, Hue hue, bool shadow)
-        {
-            Graphic graphic = GetGraphicForAnimation();
-            byte animGroup = Mobile.GetGroupForAnimation(this, graphic);
+            ushort graphic = GetGraphicForAnimation();
+            byte animGroup = GetGroupForAnimation(this, graphic, true);
             sbyte animIndex = AnimIndex;
-            drawX = drawY = drawCenterY = 0;
 
-
-            FileManager.Animations.AnimID = graphic;
-            FileManager.Animations.AnimGroup = animGroup;
             FileManager.Animations.Direction = dir;
+            FileManager.Animations.AnimGroup = animGroup;
 
-            ref AnimationDirection direction = ref FileManager.Animations.DataIndex[FileManager.Animations.AnimID].Groups[FileManager.Animations.AnimGroup].Direction[FileManager.Animations.Direction];
+            Item mount = HasEquipment ? Equipment[(int) Layer.Mount] : null;
 
-            if (direction.IsUOP)
-                direction = ref FileManager.Animations.UOPDataIndex[FileManager.Animations.AnimID].Groups[FileManager.Animations.AnimGroup].Direction[FileManager.Animations.Direction];
-
-            if ((direction.FrameCount == 0 || direction.FramesHashes == null) && !FileManager.Animations.LoadDirectionGroup(ref direction))
-                return;
-
-            direction.LastAccessTime = Engine.Ticks;
-            int fc = direction.FrameCount;
-            if (fc > 0 && animIndex >= fc)
-                animIndex = 0;
-
-            if (animIndex < direction.FrameCount)
+            if (isHuman && mount != null)
             {
-                AnimationFrameTexture hash = direction.FramesHashes[animIndex];
+                FileManager.Animations.SittingValue = 0;
 
-                if (hash == null)
-                    return;
+                ushort mountGraphic = mount.GetGraphicForAnimation();
 
-                AnimationFrameTexture frame = direction.FramesHashes[animIndex];
-
-                if (frame.IsDisposed)
-                    return;
-
-                drawCenterY = frame.CenterY;
-                drawY = drawCenterY + (int)(Offset.Z / 4) - 22 - (int)(Offset.Y - Offset.Z - 3);
-
-                if (IsFlipped)
-                    drawX = -22 + (int)Offset.X;
-                else
-                    drawX = -22 - (int)Offset.X;
-
-                const int DELTA_SHADOW = 1000;
-
-                int x = drawX + frame.CenterX;
-                int y = -drawY - (frame.Height + frame.CenterY) + drawCenterY;
-
-                int yy = -(frame.Height + frame.CenterY + 3);
-                int xx = -frame.CenterX;
-
-                if (IsFlipped)
-                    xx = -(frame.Width - frame.CenterX);
-
-                if (xx < rect.X)
-                    rect.X = xx;
-
-                if (yy < rect.Y)
-                    rect.Y = yy;
-
-                if (rect.Width < xx + frame.Width)
-                    rect.Width = xx + frame.Width;
-
-                if (rect.Height < yy + frame.Height)
-                    rect.Height = yy + frame.Height;
-
-                Texture = frame;
-                Bounds.X = x;
-                Bounds.Y = -y;
-                Bounds.Width = frame.Width;
-                Bounds.Height = frame.Height;
-
-                if (IsHuman && Equipment[(int) Layer.Mount] != null)
+                if (mountGraphic != 0xFFFF) 
                 {
-                    if (shadow)
+                    if (hasShadow)
                     {
-                        position.Z += DELTA_SHADOW;
-                        base.Draw(batcher, position, objecList);
+                        DrawInternal(batcher, this, null, drawX, drawY + 10, mirror, animIndex, true, graphic, isHuman);
+                        FileManager.Animations.AnimGroup = GetGroupForAnimation(this, mountGraphic);
+                        DrawInternal(batcher, this, mount, drawX, drawY, mirror, animIndex, true, mountGraphic, isHuman);
+                    }
+                    else
+                        FileManager.Animations.AnimGroup = GetGroupForAnimation(this, mountGraphic);
 
-                        DrawLayer(batcher, position, objecList, dir, ref drawX, ref drawY, ref drawCenterY, Layer.Mount, ref rect, ref mirror, hue);
+                    drawY += DrawInternal(batcher, this, mount, drawX, drawY, mirror, animIndex, false, mountGraphic, isHuman, isMount: true);
+                }
+            }
+            else
+            {
+                if ((FileManager.Animations.SittingValue = IsSitting()) != 0)
+                {
+                    animGroup = (byte) PEOPLE_ANIMATION_GROUP.PAG_STAND;
+                    animIndex = 0;
 
-                        position.Z -= DELTA_SHADOW;
-                        Texture = frame;
-                        Bounds.X = x;
-                        Bounds.Y = -y;
-                        Bounds.Width = frame.Width;
-                        Bounds.Height = frame.Height;
+                    ProcessSteps(out dir);
+                    FileManager.Animations.Direction = dir;
+                    FileManager.Animations.FixSittingDirection(ref dir, ref mirror, ref drawX, ref drawY);
+
+                    if (FileManager.Animations.Direction == 3)
+                        animGroup = 25;
+                    else
+                        _transform = true;
+                }
+                else if (hasShadow)
+                    DrawInternal(batcher, this, null, drawX, drawY, mirror, animIndex, true, graphic, isHuman);
+            }
+
+            FileManager.Animations.AnimGroup = animGroup;
+
+            DrawInternal(batcher, this, null, drawX, drawY, mirror, animIndex, false, graphic, isHuman);
+
+            if (HasEquipment)
+            {
+                var equip = Equipment;
+                for (int i = 0; i < Constants.USED_LAYER_COUNT; i++)
+                {
+                    Layer layer = LayerOrder.UsedLayers[dir, i];
+
+                    Item item = equip[(int)layer];
+
+                    if (item == null)
+                        continue;
+
+                    if (IsDead && (layer == Layer.Hair || layer == Layer.Beard))
+                        continue;
+
+                    if (isHuman)
+                    {
+                        if (IsCovered(this, layer))
+                            continue;
+
+                        if (item.ItemData.AnimID != 0)
+                        {
+                            graphic = item.ItemData.AnimID;
+
+                            if (FileManager.Animations.EquipConversions.TryGetValue(Graphic, out Dictionary<ushort, EquipConvData> map))
+                            {
+                                if (map.TryGetValue(item.ItemData.AnimID, out EquipConvData data))
+                                {
+                                    _equipConvData = data;
+                                    graphic = data.Graphic;
+                                }
+                            }
+
+                            DrawInternal(batcher, this, item, drawX, drawY, mirror, animIndex, false, graphic, isHuman, false);
+                        }
+                        else
+                        {
+                            if (item.ItemData.IsLight)
+                                Engine.SceneManager.GetScene<GameScene>().AddLight(this, this, drawX + 22, drawY + 22);
+                        }
+
+                        _equipConvData = null;
                     }
                     else
                     {
-                        DrawLayer(batcher, position, objecList, dir, ref drawX, ref drawY, ref drawCenterY, Layer.Mount, ref rect, ref mirror, hue);
-                        Texture = frame;
-                        Bounds.X = x;
-                        Bounds.Y = -y;
-                        Bounds.Width = frame.Width;
-                        Bounds.Height = frame.Height;
+                        if (item.ItemData.IsLight)
+                        {
+                            Engine.SceneManager.GetScene<GameScene>().AddLight(this, this, drawX + 22, drawY + 22);
+                            break;
+                        }
                     }
                 }
-                else if (shadow)
-                {
-                    position.Z += DELTA_SHADOW;
-                    base.Draw(batcher, position, objecList);
-                    position.Z -= DELTA_SHADOW;
-                }
+            }
+            //if (FileManager.Animations.SittingValue != 0)
+            //{
+            //    ref var sittingData = ref FileManager.Animations.SittingInfos[FileManager.Animations.SittingValue - 1];
 
+            //    if (FileManager.Animations.Direction == 3 && sittingData.DrawBack &&
+            //        HasEquipment && Equipment[(int) Layer.Cloak] == null)
+            //    {
 
-                if (Engine.Profile.Current.NoColorObjectsOutOfRange && Distance > World.ViewRange)
-                    HueVector = new Vector3(Constants.OUT_RANGE_COLOR, 1, HueVector.Z);
-                else if (World.Player.IsDead && Engine.Profile.Current.EnableBlackWhiteEffect)
-                    HueVector = new Vector3(Constants.DEAD_RANGE_COLOR, 1, HueVector.Z);
+            //    }
+            //}
+            // 
+
+            FrameInfo.X = Math.Abs(FrameInfo.X);
+            FrameInfo.Y = Math.Abs(FrameInfo.Y);
+            FrameInfo.Width = FrameInfo.X + FrameInfo.Width;
+            FrameInfo.Height = FrameInfo.Y + FrameInfo.Height;
+        }
+
+        private static sbyte DrawInternal(UltimaBatcher2D batcher, Mobile owner, Item entity, int x, int y, bool mirror, sbyte frameIndex, bool hasShadow, ushort id, bool isHuman, bool isParent = true, bool isMount = false)
+        {
+            if (id >= Constants.MAX_ANIMATIONS_DATA_INDEX_COUNT)
+                return 0;
+
+            x += 22;
+            y += 22;
+
+            ushort hueFromFile = _viewHue;
+            byte animGroup = FileManager.Animations.AnimGroup;
+            ref var direction = ref FileManager.Animations.GetBodyAnimationGroup(ref id, ref animGroup, ref hueFromFile, isParent).Direction[FileManager.Animations.Direction];
+            FileManager.Animations.AnimID = id;
+
+            if (direction == null || direction.Address == -1 || direction.FileIndex == -1)
+                return 0;
+
+            if ((direction.FrameCount == 0 || direction.Frames == null) && !FileManager.Animations.LoadDirectionGroup(ref direction))
+            {
+                return 0;
+            }
+
+            direction.LastAccessTime = Engine.Ticks;
+
+            int fc = direction.FrameCount;
+
+            if (fc > 0 && frameIndex >= fc) frameIndex = 0;
+
+            if (frameIndex < direction.FrameCount)
+            {
+                var frame = direction.Frames[frameIndex];
+
+                if (frame == null || frame.IsDisposed)
+                    return 0;
+
+                frame.Ticks = Engine.Ticks;
+
+                if (mirror)
+                    x -= frame.Width - frame.CenterX;
+                else
+                    x -= frame.CenterX;
+
+                y -= frame.Height + frame.CenterY;
+
+                if (hasShadow)
+                    batcher.DrawSpriteShadow(frame, x, y, mirror);
                 else
                 {
-                    bool isPartial = IsHuman && hue == 0;
-
-                    if (IsHidden)
-                    {
-                        hue = 0x038E;
-                        isPartial = false;
-                    }
-                    else if (!IsHuman && IsDead)
-                    {
-                        hue = 0x0386;
-                        isPartial = false;
-                    }
-
+                    ushort hue = _viewHue;
+                    bool partialHue = false;
 
                     if (hue == 0)
                     {
-                        hue = Hue;
-                     
+                        hue = entity?.Hue ?? owner.Hue;
+                        partialHue = !isMount && entity != null && entity.ItemData.IsPartialHue;
+
+                        if ((hue & 0x8000) != 0)
+                        {
+                            partialHue = true;
+                            hue &= 0x7FFF;
+                        }
+
                         if (hue == 0)
                         {
-                            if (direction.Address != direction.PatchedAddress)
-                                hue = FileManager.Animations.DataIndex[FileManager.Animations.AnimID].Color;
+                            hue = hueFromFile;
+
+                            if (hue == 0 && _equipConvData.HasValue)
+                                hue = _equipConvData.Value.Color;
+
+                            partialHue = false;
                         }
                     }
 
-                    HueVector = ShaderHuesTraslator.GetHueVector(hue, !IsHidden && isPartial, 0, false);
-                }
+                    ShaderHuesTraslator.GetHueVector(ref HueVector, hue, partialHue, 0);
 
-                base.Draw(batcher, position, objecList);
-                Pick(frame, Bounds, position, objecList);
-            }
-        }
-
-        private void DrawEquipment(Batcher2D batcher, Vector3 position, MouseOverList objectList, byte dir, ref int drawX, ref int drawY, ref int drawCenterY, ref Rectangle rect, ref bool mirror, Hue hue)
-        {
-            for (int i = 0; i < Constants.USED_LAYER_COUNT; i++)
-            {
-                Layer layer = LayerOrder.UsedLayers[dir, i];
-
-                DrawLayer(batcher, position, objectList, dir, ref drawX, ref drawY, ref drawCenterY, layer, ref rect, ref mirror, hue);
-            }
-        }
-
-        private void DrawLayer(Batcher2D batcher, Vector3 position, MouseOverList objectList, byte dir, ref int drawX, ref int drawY, ref int drawCenterY, Layer layer, ref Rectangle rect, ref bool mirror, Hue hue)
-        {
-            Item item = Equipment[(int)layer];
-
-            if (item == null)
-                return;
-
-            if (IsDead && (layer == Layer.Hair || layer == Layer.Beard))
-                return;
-
-
-            if (IsCovered(this, layer))
-                return;
-
-            EquipConvData? convertedItem = null;
-
-            if (hue == 0)
-                hue = item.Hue;
-
-            Graphic graphic;
-            int mountHeight = 0;
-
-            if (layer == Layer.Mount && IsHuman)
-            {
-                graphic = item.GetGraphicForAnimation();
-                mountHeight = FileManager.Animations.DataIndex[graphic].MountedHeightOffset;
-            }
-            else if (item.ItemData.AnimID != 0)
-            {
-                graphic = item.ItemData.AnimID;
-
-                if (FileManager.Animations.EquipConversions.TryGetValue(Graphic, out Dictionary<ushort, EquipConvData> map))
-                {
-                    if (map.TryGetValue(item.ItemData.AnimID, out EquipConvData data))
+                    if (_transform)
                     {
-                        convertedItem = data;
-                        graphic = data.Graphic;
+                        const float UPPER_BODY_RATIO = 0.35f;
+                        const float MID_BODY_RATIO = 0.60f;
+                        const float LOWER_BODY_RATIO = 0.94f;
+
+                        if (entity == null && isHuman)
+                        {
+                            int frameHeight = frame.Height;
+                            _characterFrameStartY = y;
+                            _characterFrameHeight = frame.Height;
+                            _startCharacterWaistY = (int) (frameHeight * UPPER_BODY_RATIO) + _characterFrameStartY;
+                            _startCharacterKneesY = (int) (frameHeight * MID_BODY_RATIO) + _characterFrameStartY;
+                            _startCharacterFeetY = (int) (frameHeight * LOWER_BODY_RATIO) + _characterFrameStartY;
+                        }
+
+                        float h3mod = UPPER_BODY_RATIO;
+                        float h6mod = MID_BODY_RATIO;
+                        float h9mod = LOWER_BODY_RATIO;
+
+
+                        if (entity != null)
+                        {
+                            float itemsEndY = y + frame.Height;
+
+                            if (y >= _startCharacterWaistY)
+                                h3mod = 0;
+                            else if (itemsEndY <= _startCharacterWaistY)
+                                h3mod = 1.0f;
+                            else
+                            {
+                                float upperBodyDiff = _startCharacterWaistY - y;
+                                h3mod = upperBodyDiff / frame.Height;
+
+                                if (h3mod < 0)
+                                    h3mod = 0;
+                            }
+
+
+                            if (_startCharacterWaistY >= itemsEndY || y >= _startCharacterKneesY)
+                                h6mod = 0;
+                            else if (_startCharacterWaistY <= y && itemsEndY <= _startCharacterKneesY)
+                                h6mod = 1.0f;
+                            else
+                            {
+                                float midBodyDiff;
+
+                                if (y >= _startCharacterWaistY)
+                                    midBodyDiff = _startCharacterKneesY - y;
+                                else if (itemsEndY <= _startCharacterKneesY)
+                                    midBodyDiff = itemsEndY - _startCharacterWaistY;
+                                else
+                                    midBodyDiff = _startCharacterKneesY - _startCharacterWaistY;
+
+                                h6mod = h3mod + midBodyDiff / frame.Height;
+
+                                if (h6mod < 0)
+                                    h6mod = 0;
+                            }
+
+
+                            if (itemsEndY <= _startCharacterKneesY)
+                                h9mod = 0;
+                            else if (y >= _startCharacterKneesY)
+                                h9mod = 1.0f;
+                            else
+                            {
+                                float lowerBodyDiff = itemsEndY - _startCharacterKneesY;
+                                h9mod = h6mod + lowerBodyDiff / frame.Height;
+
+                                if (h9mod < 0)
+                                    h9mod = 0;
+                            }
+                        }
+
+                        batcher.DrawCharacterSitted(frame, x, y, mirror, h3mod, h6mod, h9mod, ref HueVector);
                     }
-                }
-            }
-            else
-                return;
-
-
-            bool isequip = layer != Layer.Mount;
-            byte animGroup = Mobile.GetGroupForAnimation(this, graphic, isequip);
-            sbyte animIndex = AnimIndex;
-
-
-            FileManager.Animations.AnimID = graphic;
-            FileManager.Animations.AnimGroup = animGroup;
-            FileManager.Animations.Direction = dir;
-
-            ref AnimationDirection direction = ref FileManager.Animations.DataIndex[FileManager.Animations.AnimID].Groups[FileManager.Animations.AnimGroup].Direction[FileManager.Animations.Direction];
-
-            if (direction.IsUOP && !isequip)
-                direction = ref FileManager.Animations.UOPDataIndex[FileManager.Animations.AnimID].Groups[FileManager.Animations.AnimGroup].Direction[FileManager.Animations.Direction];
-
-            if ((direction.FrameCount == 0 || direction.FramesHashes == null) && !FileManager.Animations.LoadDirectionGroup(ref direction, isequip))
-                return;
-
-            direction.LastAccessTime = Engine.Ticks;
-            int fc = direction.FrameCount;
-            if (fc > 0 && animIndex >= fc)
-                animIndex = 0;
-
-            if (animIndex < direction.FrameCount)
-            {
-                var hash = direction.FramesHashes[animIndex];
-
-                if (hash == null)
-                    return;
-
-                if (hue == 0)
-                {
-                    if (direction.Address != direction.PatchedAddress)
-                        hue = FileManager.Animations.DataIndex[FileManager.Animations.AnimID].Color;
-                    if (hue == 0 && convertedItem.HasValue)
-                        hue = convertedItem.Value.Color;
-                }
-
-                AnimationFrameTexture frame = direction.FramesHashes[animIndex];
-
-                if (frame.IsDisposed)
-                    return;
-
-
-                if (drawX == 0 && drawY == 0 && drawCenterY == 0)
-                {
-                    drawCenterY = frame.CenterY;
-                    drawY = mountHeight + drawCenterY + (int) (Offset.Z / 4) - 22 - (int) (Offset.Y - Offset.Z - 3);
-
-                    if (IsFlipped)
-                        drawX = -22 + (int) Offset.X;
                     else
-                        drawX = -22 - (int) Offset.X;
+                    {
+                        if (mirror)
+                            batcher.DrawSpriteFlipped(frame, x, y, frame.Width, frame.Height, frame.Width - 44, 0, ref HueVector);
+                        else
+                            batcher.DrawSprite(frame, x, y, frame.Width, frame.Height, 0, 0, ref HueVector);
+
+                        int yy = -(frame.Height + frame.CenterY + 3);
+                        int xx = -frame.CenterX;
+
+                        if (mirror)
+                            xx = -(frame.Width - frame.CenterX);
+
+                        if (xx < owner.FrameInfo.X)
+                            owner.FrameInfo.X = xx;
+
+                        if (yy < owner.FrameInfo.Y)
+                            owner.FrameInfo.Y = yy;
+
+                        if (owner.FrameInfo.Width < xx + frame.Width)
+                            owner.FrameInfo.Width = xx + frame.Width;
+
+                        if (owner.FrameInfo.Height < yy + frame.Height)
+                            owner.FrameInfo.Height = yy + frame.Height;
+                    }
+
+                    owner.Texture = frame;
+                    owner.Select(mirror ? x + frame.Width - SelectedObject.TranslatedMousePositionByViewport.X : SelectedObject.TranslatedMousePositionByViewport.X - x, SelectedObject.TranslatedMousePositionByViewport.Y - y);
+
+                    if (entity != null && entity.ItemData.IsLight)
+                        Engine.SceneManager.GetScene<GameScene>().AddLight(owner, entity, mirror ? x + frame.Width : x, y);
                 }
 
-                int x = drawX + frame.CenterX;
-                int y = -drawY - (frame.Height + frame.CenterY) + drawCenterY - mountHeight;
-
-                int yy = -(frame.Height + frame.CenterY + 3);
-                int xx = -frame.CenterX;
-
-                if (mirror)
-                    xx = -(frame.Width - frame.CenterX);
-
-                if (xx < rect.X)
-                    rect.X = xx;
-
-                if (yy < rect.Y)
-                    rect.Y = yy;
-
-                if (rect.Width < xx + frame.Width)
-                    rect.Width = xx + frame.Width;
-
-                if (rect.Height < yy + frame.Height)
-                    rect.Height = yy + frame.Height;
-
-                Texture = frame;
-                Bounds.X = x;
-                Bounds.Y = -y;
-                Bounds.Width = frame.Width;
-                Bounds.Height = frame.Height;
-
-                if (Engine.Profile.Current.NoColorObjectsOutOfRange && Distance > World.ViewRange)
-                    HueVector = new Vector3(Constants.OUT_RANGE_COLOR, 1, HueVector.Z);
-                else if (World.Player.IsDead && Engine.Profile.Current.EnableBlackWhiteEffect)
-                    HueVector = new Vector3(Constants.DEAD_RANGE_COLOR, 1, HueVector.Z);
-                else
-                    HueVector = ShaderHuesTraslator.GetHueVector(IsHidden ? 0x038E : hue, !IsHidden && item.ItemData.IsPartialHue, 0, false);
-
-                base.Draw(batcher, position, objectList);
-                Pick(frame, Bounds, position, objectList);
-
-
-                if (item.ItemData.IsLight)
-                {
-                    Engine.SceneManager.GetScene<GameScene>()
-                          .AddLight(this, item, (IsFlipped ? (int)position.X + Bounds.X + 44 : (int)position.X - Bounds.X ), (int)position.Y + y + 22);
-                }
+                return FileManager.Animations.DataIndex[id].MountedHeightOffset;
             }
 
+            return 0;
         }
 
-        private void Pick(SpriteTexture texture, Rectangle area, Vector3 drawPosition, MouseOverList list)
+        public override void Select(int x, int y)
         {
-            int x;
+            if (SelectedObject.Object != this && Texture.Contains(x, y)) SelectedObject.Object = this;
 
-            if (IsFlipped)
-                x = (int) drawPosition.X + area.X + 44 - list.MousePosition.X;
-            else
-                x = list.MousePosition.X - (int) drawPosition.X + area.X;
-            int y = list.MousePosition.Y - ((int) drawPosition.Y - area.Y);
-            if (texture.Contains(x, y)) list.Add(this, drawPosition);
+            //if (SelectedObject.IsPointInMobile(this, x, y))
+            //{
+            //    SelectedObject.Object = this;
+            //}
         }
 
         internal static bool IsCovered(Mobile mobile, Layer layer)
         {
+            if (!mobile.HasEquipment)
+                return false;
+
             switch (layer)
             {
                 case Layer.Shoes:
                     Item pants = mobile.Equipment[(int) Layer.Pants];
                     Item robe;
 
-                    if (mobile.Equipment[(int) Layer.Legs] != null || pants != null && pants.Graphic == 0x1411)
+                    if (mobile.HasEquipment && mobile.Equipment[(int) Layer.Legs] != null || pants != null && (pants.Graphic == 0x1411 || pants.Graphic == 0x141A))
                         return true;
                     else
                     {
@@ -454,6 +519,7 @@ namespace ClassicUO.Game.GameObjects
                     }
 
                     break;
+
                 case Layer.Pants:
                     Item skirt;
                     robe = mobile.Equipment[(int) Layer.Robe];
@@ -474,16 +540,19 @@ namespace ClassicUO.Game.GameObjects
                     }
 
                     break;
+
                 case Layer.Tunic:
                     robe = mobile.Equipment[(int) Layer.Robe];
                     Item tunic = mobile.Equipment[(int) Layer.Tunic];
 
-                    if (robe != null && robe.Graphic != 0)
+                    /*if (robe != null && robe.Graphic != 0)
                         return true;
-                    else if (tunic != null && tunic.Graphic == 0x0238)
+                    else*/
+                    if (tunic != null && tunic.Graphic == 0x0238)
                         return robe != null && robe.Graphic != 0x9985 && robe.Graphic != 0x9986;
 
                     break;
+
                 case Layer.Torso:
                     robe = mobile.Equipment[(int) Layer.Robe];
 
@@ -491,21 +560,19 @@ namespace ClassicUO.Game.GameObjects
                         return true;
                     else
                     {
-                        tunic = mobile.Equipment[(int) Layer.Tunic];
                         Item torso = mobile.Equipment[(int) Layer.Torso];
-
-                        if (tunic != null && tunic.Graphic != 0x1541 && tunic.Graphic != 0x1542)
-                            return true;
 
                         if (torso != null && (torso.Graphic == 0x782A || torso.Graphic == 0x782B))
                             return true;
                     }
 
                     break;
+
                 case Layer.Arms:
                     robe = mobile.Equipment[(int) Layer.Robe];
 
                     return robe != null && robe.Graphic != 0 && robe.Graphic != 0x9985 && robe.Graphic != 0x9986;
+
                 case Layer.Helmet:
                 case Layer.Hair:
                     robe = mobile.Equipment[(int) Layer.Robe];
@@ -533,10 +600,10 @@ namespace ClassicUO.Game.GameObjects
                     }
 
                     break;
-                case Layer.Skirt:
+                /*case Layer.Skirt:
                     skirt = mobile.Equipment[(int) Layer.Skirt];
 
-                    break;
+                    break;*/
             }
 
             return false;

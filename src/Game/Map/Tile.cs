@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,39 +18,50 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
-using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Security.Cryptography;
-
 using ClassicUO.Game.GameObjects;
-using ClassicUO.Interfaces;
 using ClassicUO.IO;
 using ClassicUO.IO.Resources;
-using ClassicUO.Utility;
-using ClassicUO.Utility.Logging;
 
 namespace ClassicUO.Game.Map
 {
     internal sealed class Tile
     {
+        private bool _isDestroyed;
+
         public Tile(ushort x, ushort y)
         {
             X = x;
             Y = y;
         }
 
-        public ushort X { get; }
-        public ushort Y { get; }
+        private static readonly Queue<Tile> _pool = new Queue<Tile>();
+
+        public static Tile Create(ushort x, ushort y)
+        {
+            if (_pool.Count != 0)
+            {
+                var t = _pool.Dequeue();
+                t.X = x;
+                t.Y = y;
+                t._isDestroyed = false;
+                
+                return t;
+            }
+            return new Tile(x, y);
+        }
+
+        public ushort X { get; private set; }
+        public ushort Y { get; private set;  }
 
         public GameObject FirstNode { get; private set; }
 
         public void AddGameObject(GameObject obj)
         {
-            short priorityZ = obj.Position.Z;
+            short priorityZ = obj.Z;
 
             switch (obj)
             {
@@ -61,22 +73,25 @@ namespace ClassicUO.Game.Map
                         priorityZ--;
 
                     break;
+
                 case Mobile _:
                     priorityZ++;
 
                     break;
+
                 case Item item when item.IsCorpse:
                     priorityZ++;
 
                     break;
+
                 case GameEffect effect when effect.Source == null || !effect.IsItemEffect:
                     priorityZ += 2;
 
                     break;
+
                 default:
 
                 {
-
                     ref readonly StaticTiles data = ref FileManager.TileData.StaticData[obj.Graphic];
 
                     if (data.IsBackground)
@@ -92,10 +107,10 @@ namespace ClassicUO.Game.Map
             obj.PriorityZ = priorityZ;
 
 
-
             if (FirstNode == null)
             {
                 FirstNode = obj;
+
                 return;
             }
 
@@ -111,7 +126,7 @@ namespace ClassicUO.Game.Map
             {
                 int testPriorityZ = o.PriorityZ;
 
-                if (testPriorityZ > priorityZ || (testPriorityZ == priorityZ && obj is Land && !(o is Land)))
+                if (testPriorityZ > priorityZ || testPriorityZ == priorityZ && (obj is Land || obj is Multi) && !(o is Land))
                     break;
 
                 found = o;
@@ -153,6 +168,15 @@ namespace ClassicUO.Game.Map
 
             obj.Left = null;
             obj.Right = null;
+        }
+
+
+        public void Destroy()
+        {
+            if (_isDestroyed)
+                return;
+            _isDestroyed = true;
+            _pool.Enqueue(this);
         }
     }
 }

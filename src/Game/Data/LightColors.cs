@@ -1,12 +1,29 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿#region license
+
+//  Copyright (C) 2019 ClassicUO Development Community on Github
+//
+//	This project is an alternative client for the game Ultima Online.
+//	The goal of this is to develop a lightweight client considering 
+//	new technologies.  
+//      
+//  This program is free software: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License as published by
+//  the Free Software Foundation, either version 3 of the License, or
+//  (at your option) any later version.
+//
+//  This program is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#endregion
 
 namespace ClassicUO.Game.Data
 {
-    static class LightColors
+    internal static class LightColors
     {
         public static ushort GetHue(ushort id)
         {
@@ -28,23 +45,32 @@ namespace ClassicUO.Game.Data
             {
                 case 0x088C:
                     color = 31;
+
                     break;
+
                 case 0x0FAC:
                     color = 30;
+
                     break;
+
                 case 0x0FB1:
                     color = 60;
+
                     break;
+
                 case 0x1647:
                     color = 61;
+
                     break;
+
                 case 0x19BB:
                 case 0x1F2B:
                     color = 40;
+
                     break;
-                default:
-                    break;
-            };
+            }
+
+            ;
 
             if (id < 0x09FB || id > 0x0A14)
             {
@@ -66,66 +92,41 @@ namespace ClassicUO.Game.Data
                                             {
                                                 if (id < 0x19AB || id > 0x19B6)
                                                 {
-                                                    if ((id >= 0x1ECD && id <= 0x1ECF) ||
-                                                        (id >= 0x1ED0 && id <= 0x1ED2))
-                                                    {
+                                                    if (id >= 0x1ECD && id <= 0x1ECF ||
+                                                        id >= 0x1ED0 && id <= 0x1ED2)
                                                         color = 1;
-                                                    }
                                                 }
                                                 else
-                                                {
                                                     color = 60;
-                                                }
                                             }
                                             else
-                                            {
                                                 color = 60;
-                                            }
                                         }
                                         else
-                                        {
                                             color = 61;
-                                        }
                                     }
                                     else
-                                    {
                                         color = 61;
-                                    }
                                 }
                                 else
-                                {
                                     color = 31;
-                                }
                             }
                             else
-                            {
                                 color = 666;
-                            }
                         }
                         else
-                        {
                             color = 666;
-                        }
                     }
                     else
-                    {
                         color = 666;
-                    }
                 }
                 else
-                {
                     color = 666;
-                }
             }
             else
-            {
                 color = 30;
-            }
 
-            if (id == 0x1FD4 || id == 0x0F6C)
-            {
-                color = 2;
-            }
+            if (id == 0x1FD4 || id == 0x0F6C) color = 2;
 
             if (id < 0x0E2D || id > 0x0E30)
             {
@@ -157,90 +158,72 @@ namespace ClassicUO.Game.Data
                                                                 {
                                                                     case 0x40FE:
                                                                         color = 40;
+
                                                                         break;
+
                                                                     case 0x40FF:
                                                                         color = 10;
+
                                                                         break;
+
                                                                     case 0x4100:
                                                                         color = 20;
+
                                                                         break;
+
                                                                     case 0x4101:
                                                                         color = 32;
+
                                                                         break;
+
                                                                     default:
-                                                                        if ((id >= 0x983B &&
-                                                                             id <= 0x983D) ||
-                                                                            (id >= 0x983F && id <= 0x9841))
-                                                                        {
+
+                                                                        if (id >= 0x983B &&
+                                                                            id <= 0x983D ||
+                                                                            id >= 0x983F && id <= 0x9841)
                                                                             color = 30;
-                                                                        }
+
                                                                         break;
                                                                 }
                                                             }
                                                             else
-                                                            {
                                                                 color = 31;
-                                                            }
                                                         }
                                                         else
-                                                        {
                                                             color = 1;
-                                                        }
                                                     }
                                                     else
-                                                    {
                                                         color = 31;
-                                                    }
                                                 }
                                                 else
-                                                {
                                                     color = 6;
-                                                }
                                             }
                                             else
-                                            {
                                                 color = 6;
-                                            }
                                         }
                                         else
-                                        {
                                             color = 1;
-                                        }
                                     }
                                     else
-                                    {
                                         color = 31;
-                                    }
                                 }
                                 else
-                                {
                                     color = 31;
-                                }
                             }
                             else
-                            {
                                 color = 31;
-                            }
                         }
                         else
-                        {
                             color = 31;
-                        }
                     }
                     else
-                    {
                         color = 6;
-                    }
                 }
                 else
-                {
                     color = 40;
-                }
             }
             else
-            {
                 color = 62;
-            }
 
             return color;
         }

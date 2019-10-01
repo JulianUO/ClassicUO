@@ -1,16 +1,37 @@
-﻿using System;
-using System.Collections.Generic;
+﻿#region license
+
+//  Copyright (C) 2019 ClassicUO Development Community on Github
+//
+//	This project is an alternative client for the game Ultima Online.
+//	The goal of this is to develop a lightweight client considering 
+//	new technologies.  
+//      
+//  This program is free software: you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License as published by
+//  the Free Software Foundation, either version 3 of the License, or
+//  (at your option) any later version.
+//
+//  This program is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#endregion
+
+using System;
 using System.IO;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading.Tasks;
 
 using ClassicUO.Utility;
 
 namespace ClassicUO.IO.Resources
 {
-    class HuesLoader : ResourceLoader
+    internal class HuesLoader : ResourceLoader
     {
         public HuesGroup[] HuesRange { get; private set; }
 
@@ -20,34 +41,39 @@ namespace ClassicUO.IO.Resources
 
         public ushort[] RadarCol { get; private set; }
 
-        public override void Load()
+        public override Task Load()
         {
-            string path = Path.Combine(FileManager.UoFolderPath, "hues.mul");
+            return Task.Run(() =>
+            {
+                string path = Path.Combine(FileManager.UoFolderPath, "hues.mul");
 
-            if (!File.Exists(path))
-                throw new FileNotFoundException();
-            UOFileMul file = new UOFileMul(path, false);
-            int groupSize = Marshal.SizeOf<HuesGroup>();
-            int entrycount = (int)file.Length / groupSize;
-            HuesCount = entrycount * 8;
-            HuesRange = new HuesGroup[entrycount];
-            ulong addr = (ulong)file.StartAddress;
+                if (!File.Exists(path))
+                    throw new FileNotFoundException();
 
-            for (int i = 0; i < entrycount; i++)
-                HuesRange[i] = Marshal.PtrToStructure<HuesGroup>((IntPtr)(addr + (ulong)(i * groupSize)));
+                UOFileMul file = new UOFileMul(path);
+                int groupSize = Marshal.SizeOf<HuesGroup>();
+                int entrycount = (int) file.Length / groupSize;
+                HuesCount = entrycount * 8;
+                HuesRange = new HuesGroup[entrycount];
+                ulong addr = (ulong) file.StartAddress;
 
-            path = Path.Combine(FileManager.UoFolderPath, "radarcol.mul");
+                for (int i = 0; i < entrycount; i++)
+                    HuesRange[i] = Marshal.PtrToStructure<HuesGroup>((IntPtr) (addr + (ulong) (i * groupSize)));
 
-            if (!File.Exists(path))
-                throw new FileNotFoundException();
-            UOFileMul radarcol = new UOFileMul(path, false);
-            RadarCol = radarcol.ReadArray<ushort>((int)radarcol.Length >> 1);
-            file.Dispose();
-            radarcol.Dispose();
+                path = Path.Combine(FileManager.UoFolderPath, "radarcol.mul");
+
+                if (!File.Exists(path))
+                    throw new FileNotFoundException();
+
+                UOFileMul radarcol = new UOFileMul(path);
+                RadarCol = radarcol.ReadArray<ushort>((int) radarcol.Length >> 1);
+                file.Dispose();
+                radarcol.Dispose();
+            });
         }
 
 
-        protected override void CleanResources()
+        public override void CleanResources()
         {
             // nothing to clear
         }
@@ -82,15 +108,26 @@ namespace ClassicUO.IO.Resources
             int len = HuesRange.Length;
 
             int idx = 0;
+
+            for (int r = 0; r < len; r++)
+            {
+                for (int y = 0; y < 8; y++)
+                {
+                    for (int x = 0; x < 32; x++) hues[idx++] = HuesHelper.Color16To32(HuesRange[r].Entries[y].ColorTable[x]);
+                }
+            }
+
             for (int r = 0; r < len; r++)
             {
                 for (int y = 0; y < 8; y++)
                 {
                     for (int x = 0; x < 32; x++)
                     {
-                        hues[idx++] = HuesHelper.Color16To32(HuesRange[r].Entries[y].ColorTable[x]) ;
+                        if (x == 0)
+                            hues[idx++] = HuesHelper.Color16To32(HuesRange[0].Entries[0].ColorTable[0]);
+                        else
+                            hues[idx++] = HuesHelper.Color16To32(HuesRange[r].Entries[y].ColorTable[x]);
                     }
-
                 }
             }
 
@@ -195,7 +232,7 @@ namespace ClassicUO.IO.Resources
                 int e = color % 8;
                 uint cl = HuesHelper.Color16To32(c);
                 (byte B, byte G, byte R, byte A) = HuesHelper.GetBGRA(cl);
-                //(byte R, byte G, byte B, byte A) = GetBGRA(cl);
+                //(byte R, byte G, byte B, byte A) = HuesHelper.GetBGRA(cl);
 
                 if (R == G && B == G)
                     return HuesHelper.Color16To32(HuesRange[g].Entries[e].ColorTable[(c >> 10) & 0x1F]);
@@ -206,10 +243,8 @@ namespace ClassicUO.IO.Resources
             return HuesHelper.Color16To32(c);
         }
 
-        public ushort GetRadarColorData(int c)
-        {
-            return c < RadarCol.Length ? RadarCol[c] : (ushort)0;
-        }
+        [MethodImpl(256)]
+        public ushort GetRadarColorData(int c) => c >= 0 && c < RadarCol.Length ? RadarCol[c] : (ushort) 0;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]

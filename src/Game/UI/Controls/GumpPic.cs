@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,11 +18,14 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System.Collections.Generic;
 
+using ClassicUO.Input;
 using ClassicUO.IO;
+using ClassicUO.Network;
 using ClassicUO.Renderer;
 
 using Microsoft.Xna.Framework;
@@ -30,7 +34,7 @@ namespace ClassicUO.Game.UI.Controls
 {
     internal abstract class GumpPicBase : Control
     {
-        private ushort _lastGump = 0xFFFF;
+        private ushort _graphic;
 
         protected GumpPicBase()
         {
@@ -38,28 +42,26 @@ namespace ClassicUO.Game.UI.Controls
             AcceptMouseInput = true;
         }
 
-        public Graphic Graphic { get; set; }
+        public Graphic Graphic
+        {
+            get => _graphic;
+            set
+            {
+                _graphic = value;
+                Texture = FileManager.Gumps.GetTexture(_graphic);
+            }
+        }
 
         public Hue Hue { get; set; }
 
-        public bool IsPaperdoll { get; set; }
 
         public override void Update(double totalMS, double frameMS)
         {
-            if (Texture == null || Texture.IsDisposed || Graphic != _lastGump)
+            if (Texture == null)
             {
-                _lastGump = Graphic;
-                Texture = FileManager.Gumps.GetTexture(Graphic);
+                Dispose();
 
-                if (Texture == null)
-                {
-                    Dispose();
-
-                    return;
-                }
-
-                Width = Texture.Width;
-                Height = Texture.Height;
+                return;
             }
 
             Texture.Ticks = (long) totalMS;
@@ -67,9 +69,20 @@ namespace ClassicUO.Game.UI.Controls
             base.Update(totalMS, frameMS);
         }
 
-        protected override bool Contains(int x, int y)
+        public override bool Contains(int x, int y)
         {
-            return Texture.Contains(x, y);
+            if (Texture.Contains(x, y))
+                return true;
+
+            for (int i = 0; i < Children.Count; i++)
+            {
+                var c = Children[i];
+
+                if (c.Contains(x, y))
+                    return true;
+            }
+
+            return false;
         }
     }
 
@@ -80,10 +93,7 @@ namespace ClassicUO.Game.UI.Controls
             X = x;
             Y = y;
             Graphic = graphic;
-
             Hue = hue;
-
-            Texture = FileManager.Gumps.GetTexture(Graphic);
 
             if (Texture == null)
                 Dispose();
@@ -94,9 +104,53 @@ namespace ClassicUO.Game.UI.Controls
             }
         }
 
+        public GumpPic(List<string> parts) : this(int.Parse(parts[1]), int.Parse(parts[2]), Graphic.Parse(parts[3]), (ushort) (parts.Count > 4 ? TransformHue((ushort) (Hue.Parse(parts[4].Substring(parts[4].IndexOf('=') + 1)) + 1)) : 0))
+        {
+        }
+
+        public GumpPic(int x, int y, UOTexture texture, Hue hue)
+        {
+            X = x;
+            Y = y;
+            Graphic = Graphic.INVALID;
+
+            Hue = hue;
+
+            Texture = texture;
+
+            if (Texture == null)
+                Dispose();
+            else
+            {
+                Width = Texture.Width;
+                Height = Texture.Height;
+            }
+            WantUpdateSize = false;
+        }
+
+        public bool IsPartialHue { get; set; }
+        public bool ContainsByBounds { get; set; }
+        public bool IsVirtue { get; set; }
+
+        protected override bool OnMouseDoubleClick(int x, int y, MouseButton button)
+        {
+            if (IsVirtue && button == MouseButton.Left)
+            {
+                NetClient.Socket.Send(new PVirtueGumpReponse(World.Player, Graphic.Value));
+
+                return false;
+            }
+
+            return base.OnMouseDoubleClick(x, y, button);
+        }
+
+        public override bool Contains(int x, int y)
+        {
+            return ContainsByBounds || base.Contains(x, y);
+        }
+
         private static ushort TransformHue(ushort hue)
         {
-            
             if (hue <= 2)
                 hue = 0;
 
@@ -105,19 +159,15 @@ namespace ClassicUO.Game.UI.Controls
             return hue;
         }
 
-        public bool IsPartialHue { get; set; }
-
-        public GumpPic(List<string> parts) : this(int.Parse(parts[1]), int.Parse(parts[2]), Graphic.Parse(parts[3]), (ushort) (parts.Count > 4 ? TransformHue( (ushort )( Hue.Parse(parts[4].Substring(parts[4].IndexOf('=') + 1)) + 1)) : 0))
-        {
-
-        }
-
-        public override bool Draw(Batcher2D batcher, int x, int y)
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
         {
             if (IsDisposed)
                 return false;
 
-            batcher.Draw2D(Texture, x, y, ShaderHuesTraslator.GetHueVector(Hue, IsPartialHue, Alpha, true));
+            ResetHueVector();
+            ShaderHuesTraslator.GetHueVector(ref _hueVector, Hue, IsPartialHue, Alpha, true);
+
+            batcher.Draw2D(Texture, x, y, Width, Height, ref _hueVector);
 
             return base.Draw(batcher, x, y);
         }

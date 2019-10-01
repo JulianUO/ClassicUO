@@ -1,4 +1,5 @@
 #region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,14 +18,13 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System.Collections.Generic;
 
 using ClassicUO.IO.Resources;
 using ClassicUO.Renderer;
-
-using Microsoft.Xna.Framework;
 
 namespace ClassicUO.Game.UI.Controls
 {
@@ -34,23 +34,14 @@ namespace ClassicUO.Game.UI.Controls
 
         public Label(string text, bool isunicode, ushort hue, int maxwidth = 0, byte font = 0xFF, FontStyle style = FontStyle.None, TEXT_ALIGN_TYPE align = TEXT_ALIGN_TYPE.TS_LEFT, bool ishtml = false)
         {
-            _gText = new RenderedText()
-            {
-                IsHTML = ishtml,
-                IsUnicode = isunicode,
-                Font = font,
-                FontStyle = style,
-                Hue = hue,
-                Align = align,
-                MaxWidth = maxwidth,
-                Text = text
-            };
+            _gText = RenderedText.Create(text, hue, font, isunicode, style, align, maxwidth, isHTML: ishtml);
+
             AcceptMouseInput = false;
             Width = _gText.Width;
             Height = _gText.Height;
         }
 
-        public Label(List<string> parts, string[] lines) : this(lines[int.Parse(parts[4])], true, (Hue) (Hue.Parse(parts[3]) + 1), 0, style: FontStyle.BlackBorder)
+        public Label(List<string> parts, string[] lines) : this(int.TryParse(parts[4], out int lineIndex) && lineIndex >= 0 && lineIndex < lines.Length ? lines[lineIndex] : string.Empty, true, (Hue) (Hue.Parse(parts[3]) + 1), 0, style: FontStyle.BlackBorder)
         {
             X = int.Parse(parts[1]);
             Y = int.Parse(parts[2]);
@@ -67,6 +58,7 @@ namespace ClassicUO.Game.UI.Controls
             }
         }
 
+
         public Hue Hue
         {
             get => _gText.Hue;
@@ -79,14 +71,17 @@ namespace ClassicUO.Game.UI.Controls
                 }
             }
         }
+   
 
         public byte Font => _gText.Font;
 
-        public override bool Draw(Batcher2D batcher, int x, int y)
+        public bool Unicode => _gText.IsUnicode;
+
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
         {
             if (IsDisposed) return false;
 
-            _gText.Draw(batcher, x , y);
+            _gText.Draw(batcher, x, y, Alpha);
 
             return base.Draw(batcher, x, y);
         }

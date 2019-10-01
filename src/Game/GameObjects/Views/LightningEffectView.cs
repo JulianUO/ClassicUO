@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,17 +18,20 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
-using ClassicUO.Game.GameObjects;
-using ClassicUO.Input;
+
+using System;
+
 using ClassicUO.IO;
 using ClassicUO.Renderer;
 
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace ClassicUO.Game.GameObjects
 {
-    internal partial class LightningEffect
+    internal sealed partial class LightningEffect
     {
         private static readonly Point[] _offsets =
         {
@@ -36,28 +40,64 @@ namespace ClassicUO.Game.GameObjects
         private Graphic _displayed = Graphic.INVALID;
 
 
-        public override bool Draw(Batcher2D batcher, Vector3 position, MouseOverList list)
+        private static readonly Lazy<BlendState> _multiplyBlendState = new Lazy<BlendState>(() =>
         {
+            BlendState state = new BlendState
+            {
+                ColorSourceBlend = Microsoft.Xna.Framework.Graphics.Blend.Zero,
+                ColorDestinationBlend = Microsoft.Xna.Framework.Graphics.Blend.SourceColor
+            };
+
+            return state;
+        });
+        public override bool Draw(UltimaBatcher2D batcher, int posX, int posY)
+        {
+            ResetHueVector();
+
             if (AnimationGraphic != _displayed || Texture == null || Texture.IsDisposed)
             {
                 _displayed = AnimationGraphic;
 
                 if (_displayed > 0x4E29)
                     return false;
+
                 Texture = FileManager.Gumps.GetTexture(_displayed);
-                Point offset = _offsets[_displayed - 20000];
-                Bounds = new Rectangle(offset.X, Texture.Height - 33 + offset.Y, Texture.Width, Texture.Height);
+                ref Point offset = ref _offsets[_displayed - 20000];
+
+                Bounds.X = offset.X;
+                Bounds.Y = Texture.Height - 33 + offset.Y;
+                Bounds.Width = Texture.Width;
+                Bounds.Height = Texture.Height;
             }
-            
-            if (Engine.Profile.Current.NoColorObjectsOutOfRange && Distance > World.ViewRange)
-                HueVector = new Vector3(Constants.OUT_RANGE_COLOR, 1, HueVector.Z);
+
+            if (Engine.Profile.Current.NoColorObjectsOutOfRange && Distance > World.ClientViewRange)
+            {
+                HueVector.X = Constants.OUT_RANGE_COLOR;
+                HueVector.Y = 1;
+            }
             else if (World.Player.IsDead && Engine.Profile.Current.EnableBlackWhiteEffect)
-                HueVector = new Vector3(Constants.DEAD_RANGE_COLOR, 1, HueVector.Z);
+            {
+                HueVector.X = Constants.DEAD_RANGE_COLOR;
+                HueVector.Y = 1;
+            }
             else
-                HueVector = ShaderHuesTraslator.GetHueVector(Hue);
+            {
+                //ShaderHuesTraslator.GetHueVector(ref HueVector, 1150);
+
+                ResetHueVector();
+                HueVector.X = 1150;
+                HueVector.Y = ShaderHuesTraslator.SHADER_LIGHTS;
+                HueVector.Z = 0;
+            }
 
             Engine.DebugInfo.EffectsRendered++;
-            return base.Draw(batcher, position, list);
+
+
+            batcher.SetBlendState(BlendState.Additive);
+            base.Draw(batcher, posX, posY);
+            batcher.SetBlendState(null);
+
+            return true;
         }
     }
 }

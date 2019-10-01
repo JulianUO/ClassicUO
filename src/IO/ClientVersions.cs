@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,7 +18,9 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 namespace ClassicUO.IO
 {
     public enum ClientVersions
@@ -25,8 +28,10 @@ namespace ClassicUO.IO
         CV_OLD = (1 << 24) | (0 << 16) | (0 << 8) | 0, // Original game
         CV_200 = (2 << 24) | (0 << 16) | (0 << 8) | 0, // T2A Introduction. Adds screen dimensions packet
         CV_204C = (2 << 24) | (0 << 16) | (4 << 8) | 2, // Adds *.def files
+        CV_300 = (3 << 24) | (0 << 16) | (0 << 8) | 0,
         CV_305D = (3 << 24) | (0 << 16) | (5 << 8) | 3, // Renaissance. Expanded character slots.
         CV_306E = (3 << 24) | (0 << 16) | (0 << 8) | 0, // Adds a packet with the client type, switches to mp3 from midi for sound files
+        CV_308 = (3 << 24) | (0 << 16) | (8 << 8) | 0,
         CV_308D = (3 << 24) | (0 << 16) | (8 << 8) | 3, // Adds maximum stats to the status bar
         CV_308J = (3 << 24) | (0 << 16) | (8 << 8) | 9, // Adds followers to the status bar
         CV_308Z = (3 << 24) | (0 << 16) | (8 << 8) | 25, // Age of Shadows. Adds paladin, necromancer, custom housing, resists, profession selection window, removes save password checkbox
@@ -49,6 +54,7 @@ namespace ClassicUO.IO
         CV_70160 = (7 << 24) | (0 << 16) | (16 << 8) | 0, //
         CV_70180 = (7 << 24) | (0 << 16) | (18 << 8) | 0, //
         CV_70240 = (7 << 24) | (0 << 16) | (24 << 8) | 0, // *.mul -> *.uop
-        CV_70331 = (7 << 24) | (0 << 16) | (33 << 8) | 1 //
+        CV_70331 = (7 << 24) | (0 << 16) | (33 << 8) | 1, //
+        CV_704565 = (7 << 24) | (0 << 16) | (45 << 8) | 65, //
     }
 }

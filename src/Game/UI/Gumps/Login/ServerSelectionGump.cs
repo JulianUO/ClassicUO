@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,6 +18,7 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using System.Linq;
@@ -27,9 +29,7 @@ using ClassicUO.Input;
 using ClassicUO.IO;
 using ClassicUO.IO.Resources;
 using ClassicUO.Renderer;
-
-using Microsoft.Xna.Framework;
-
+using ClassicUO.Utility.Logging;
 using SDL2;
 
 namespace ClassicUO.Game.UI.Gumps.Login
@@ -39,7 +39,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
         private const ushort SELECTED_COLOR = 0x0021;
         private const ushort NORMAL_COLOR = 0x034F;
 
-        public ServerSelectionGump() : base(0,0)
+        public ServerSelectionGump() : base(0, 0)
         {
             //AddChildren(new LoginBackground(true));
 
@@ -136,7 +136,16 @@ namespace ClassicUO.Game.UI.Gumps.Login
             LoginScene loginScene = Engine.SceneManager.GetScene<LoginScene>();
 
             foreach (ServerListEntry server in loginScene.Servers)
-                scrollArea.Add(new ServerEntryGump(server));
+            {
+                HoveredLabel label;
+                scrollArea.Add(label = new HoveredLabel($"{server.Name}                         -           -", false, NORMAL_COLOR, SELECTED_COLOR, font: 5)
+                {
+                    X = 74,
+                    //Y = 250
+                });
+
+                label.MouseUp += (sender, e) => { OnButtonClick((int) (Buttons.Server + server.Index)); };
+            }
 
             Add(scrollArea);
 
@@ -159,6 +168,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
             }
 
             AcceptKeyboardInput = true;
+            CanCloseWithRightClick = false;
         }
 
         public override void OnButtonClick(int buttonID)
@@ -176,12 +186,26 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 {
                     case Buttons.Next:
                     case Buttons.Earth:
+
                         if (loginScene.Servers.Any())
-                            loginScene.SelectServer((byte) loginScene.Servers[(Engine.GlobalSettings.LastServerNum-1)].Index);
+                        {
+                            int index = Engine.GlobalSettings.LastServerNum;
+
+                            if (index <= 0 || index > loginScene.Servers.Length)
+                            {
+                                Log.Message(LogTypes.Warning, $"Wrong server index: {index}");
+
+                                index = 1;
+                            }
+
+                            loginScene.SelectServer((byte) loginScene.Servers[index - 1].Index);
+                        }
+
                         break;
 
                     case Buttons.Prev:
                         loginScene.StepBack();
+
                         break;
                 }
             }
@@ -192,8 +216,20 @@ namespace ClassicUO.Game.UI.Gumps.Login
             if (key == SDL.SDL_Keycode.SDLK_RETURN || key == SDL.SDL_Keycode.SDLK_KP_ENTER)
             {
                 LoginScene loginScene = Engine.SceneManager.GetScene<LoginScene>();
+
                 if (loginScene.Servers.Any())
-                    loginScene.SelectServer((byte)loginScene.Servers[(Engine.GlobalSettings.LastServerNum - 1)].Index);
+                {
+                    int index = Engine.GlobalSettings.LastServerNum;
+
+                    if (index <= 0 || index > loginScene.Servers.Length)
+                    {
+                        Log.Message(LogTypes.Warning, $"Wrong server index: {index}");
+
+                        index = 1;
+                    }
+
+                    loginScene.SelectServer((byte) loginScene.Servers[index - 1].Index);
+                }
             }
         }
 
@@ -211,89 +247,41 @@ namespace ClassicUO.Game.UI.Gumps.Login
         private class ServerEntryGump : Control
         {
             private readonly int _buttonId;
-            private readonly RenderedText _labelName;
-            private readonly RenderedText _labelPacketLoss;
-            private readonly RenderedText _labelPing;
+
+            private readonly HoveredLabel _serverName;
 
             public ServerEntryGump(ServerListEntry entry)
             {
                 _buttonId = entry.Index;
-                _labelName = CreateRenderedText(entry.Name);
-                _labelPing = CreateRenderedText("-");
-                _labelPacketLoss = CreateRenderedText("-");
-                _labelName.CreateTexture();
-                _labelPing.CreateTexture();
-                _labelPacketLoss.CreateTexture();
+
+                Add(_serverName = new HoveredLabel($"{entry.Name}     -      -" , false, NORMAL_COLOR, SELECTED_COLOR, font: 5));
+                _serverName.X = 74;
+                _serverName.Y = 250;
+
                 AcceptMouseInput = true;
                 Width = 393;
                 Height = 25;
 
-                //Height = new[]
-                //{
-                //    _labelName.Height, _labelPing.Height, _labelPacketLoss.Height
-                //}.Max();
-
-
                 WantUpdateSize = false;
-            }
-
-            private RenderedText CreateRenderedText(string text)
-            {
-                return new RenderedText
-                {
-                    Text = text,
-                    Font = 5,
-                    IsUnicode = false,
-                    Hue = _buttonId == Engine.GlobalSettings.LastServerNum ? SELECTED_COLOR : NORMAL_COLOR,
-                    Align = TEXT_ALIGN_TYPE.TS_LEFT,
-                    MaxWidth = 0
-                };
-            }
-
-            public override bool Draw(Batcher2D batcher, int x, int y)
-            {
-                if (IsDisposed)
-                    return false;
-                _labelName.Draw(batcher, x + 74, y);
-                _labelPing.Draw(batcher, x + 250, y);
-                _labelPacketLoss.Draw(batcher, x + 310 , y);
-
-                return base.Draw(batcher, x, y);
             }
 
             protected override void OnMouseOver(int x, int y)
             {
-                _labelName.Hue = SELECTED_COLOR;
-                _labelPing.Hue = SELECTED_COLOR;
-                _labelPacketLoss.Hue = SELECTED_COLOR;
-                _labelName.CreateTexture();
-                _labelPing.CreateTexture();
-                _labelPacketLoss.CreateTexture();
+                _serverName.Hue = SELECTED_COLOR;
+
                 base.OnMouseOver(x, y);
             }
 
             protected override void OnMouseExit(int x, int y)
             {
-                _labelName.Hue = NORMAL_COLOR;
-                _labelPing.Hue = NORMAL_COLOR;
-                _labelPacketLoss.Hue = NORMAL_COLOR;
-                _labelName.CreateTexture();
-                _labelPing.CreateTexture();
-                _labelPacketLoss.CreateTexture();
+                _serverName.Hue = 0;
+
                 base.OnMouseExit(x, y);
             }
 
-            protected override void OnMouseClick(int x, int y, MouseButton button)
+            protected override void OnMouseUp(int x, int y, MouseButton button)
             {
-                if (button == MouseButton.Left) OnButtonClick((int) Buttons.Server + _buttonId);
-            }
-
-            public override void Dispose()
-            {
-                base.Dispose();
-                _labelName.Destroy();
-                _labelPing.Destroy();
-                _labelPacketLoss.Destroy();
+                if (button == MouseButton.Left) OnButtonClick((int)Buttons.Server + _buttonId);
             }
         }
     }

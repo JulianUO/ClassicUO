@@ -1,4 +1,5 @@
 ﻿#region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,30 +18,27 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
 
 using ClassicUO.Renderer;
 
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace ClassicUO.Game.UI.Controls
 {
     internal class HitBox : Control
     {
-        protected readonly SpriteTexture _texture;
+        protected readonly Texture2D _texture;
 
         public HitBox(int x, int y, int w, int h)
         {
             CanMove = false;
             AcceptMouseInput = true;
             Alpha = 0.75f;
-            IsTransparent = true;
-            _texture = new SpriteTexture(1, 1);
+            _texture = Textures.GetTexture(Color.White);
 
-            _texture.SetData(new uint[1]
-            {
-                0xFFFF_FFFF
-            });
             X = x;
             Y = y;
             Width = w;
@@ -51,29 +49,21 @@ namespace ClassicUO.Game.UI.Controls
 
         protected override ClickPriority Priority { get; } = ClickPriority.High;
 
-        public override void Update(double totalMS, double frameMS)
-        {
-            if (IsDisposed)
-                return;
-            base.Update(totalMS, frameMS);
-            _texture.Ticks = (long) totalMS;
-        }
 
-        public override bool Draw(Batcher2D batcher, int x, int y)
+        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
         {
             if (IsDisposed)
                 return false;
 
             if (MouseIsOver)
-                batcher.Draw2D(_texture, x, y, 0, 0, Width, Height, ShaderHuesTraslator.GetHueVector(0, false, IsTransparent ? Alpha : 0, false));
-            
-            return base.Draw(batcher, x, y);
-        }
+            {
+                ResetHueVector();
+                ShaderHuesTraslator.GetHueVector(ref _hueVector, 0, false, Alpha, true);
 
-        public override void Dispose()
-        {
-            base.Dispose();
-            _texture?.Dispose();
+                batcher.Draw2D(_texture, x, y, 0, 0, Width, Height, ref _hueVector);
+            }
+
+            return base.Draw(batcher, x, y);
         }
     }
 }

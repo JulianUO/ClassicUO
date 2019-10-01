@@ -1,4 +1,5 @@
 #region license
+
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
 //	This project is an alternative client for the game Ultima Online.
@@ -17,11 +18,10 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 #endregion
+
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 
 using ClassicUO.Game.Map;
@@ -30,7 +30,6 @@ using ClassicUO.Interfaces;
 using ClassicUO.IO;
 using ClassicUO.IO.Resources;
 using ClassicUO.Renderer;
-using ClassicUO.Utility;
 
 using Microsoft.Xna.Framework;
 
@@ -38,45 +37,35 @@ using IUpdateable = ClassicUO.Interfaces.IUpdateable;
 
 namespace ClassicUO.Game.GameObjects
 {
-    internal class TextOverheadContainer
+    internal abstract class BaseGameObject
     {
-
+        public Point RealScreenPosition;
     }
 
-    internal abstract partial class GameObject : IUpdateable, INode<GameObject>
+
+    internal abstract partial class GameObject : BaseGameObject, IUpdateable, INode<GameObject>
     {
         private Position _position = Position.INVALID;
+        private Point _screenPosition;
+
         public Vector3 Offset;
-        private Deque<TextOverhead> _overHeads;
-        private Tile _tile;
-        private Vector3 _screenPosition;
 
-        protected GameObject()
-        {
-
-        }
-
-        public GameObject Left { get; set; }
-        public GameObject Right { get; set; }
-
-        protected virtual bool CanCreateOverheads => true;
-
-        public Vector3 ScreenPosition => _screenPosition;
-
-        public Vector3 RealScreenPosition;
 
         public bool IsPositionChanged { get; protected set; }
+
+        public TextContainer TextContainer { get; private set; }
 
         public Position Position
         {
             get => _position;
+            [MethodImpl(256)]
             set
             {
                 if (_position != value)
                 {
                     _position = value;
                     _screenPosition.X = (_position.X - _position.Y) * 22;
-                    _screenPosition.Y = (_position.X + _position.Y) * 22 - _position.Z * 4;
+                    _screenPosition.Y = (_position.X + _position.Y) * 22 - (_position.Z << 2);
                     IsPositionChanged = true;
                     OnPositionChanged();
                 }
@@ -101,238 +90,402 @@ namespace ClassicUO.Game.GameObjects
             set => Position = new Position(Position.X, Position.Y, value);
         }
 
-        public virtual Hue Hue { get; set; }
+        public Hue Hue { get; set; }
 
-        public virtual Graphic Graphic { get; set; }
-       
+        public Graphic Graphic { get; set; }
+
         public sbyte AnimIndex { get; set; }
 
         public int CurrentRenderIndex { get; set; }
 
-        //public byte UseInRender { get; set; }
+        public byte UseInRender { get; set; }
 
         public short PriorityZ { get; set; }
 
-        public bool HasOverheads => _overHeads != null;
-
-        public IReadOnlyList<TextOverhead> Overheads => CanCreateOverheads ? _overHeads ?? (_overHeads = new Deque<TextOverhead>()) : null;
-
-        //public Tile Tile
-        //{
-        //    get => _tile;
-        //    set
-        //    {
-        //        if (_tile != value)
-        //        {
-        //            _tile?.RemoveGameObject(this);
-        //            _tile = value;
-
-        //            if (_tile != null)
-        //                _tile.AddGameObject(this);
-        //            else
-        //            {
-        //                if (this != World.Player && !IsDisposed) Dispose();
-        //            }
-        //        }
-        //    }
-        //}
-
-        public bool IsDestroyed { get; private set; }
+        public bool IsDestroyed { get; protected set; }
 
         public int Distance
         {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            [MethodImpl(256)]
             get
             {
                 if (World.Player == null)
                     return ushort.MaxValue;
 
-                if (World.Player.IsMoving && this != World.Player)
-                {
-                    Mobile.Step step = World.Player.Steps.Back();
+                if (this == World.Player)
+                    return 0;
 
-                    return Position.DistanceTo(step.X, step.Y);
+                int x, y;
+
+                if (this is Mobile m && m.IsMoving)
+                {
+                    Mobile.Step step = m.Steps.Back();
+                    x = step.X;
+                    y = step.Y;
+                }
+                else
+                {
+                    x = X;
+                    y = Y;
                 }
 
-                return Position.DistanceTo(World.Player.Position);
+                int fx = World.RangeSize.X;
+                int fy = World.RangeSize.Y;
 
+                return Math.Max(Math.Abs(x - fx), Math.Abs(y - fy));
             }
         }
+
+        public Tile Tile { get; private set; }
+        public GameObject Left { get; set; }
+        public GameObject Right { get; set; }
 
         public virtual void Update(double totalMS, double frameMS)
         {
-            if (_overHeads != null)
-            {
-                for (int i = 0; i < _overHeads.Count; i++)
-                {
-                    var overhead = _overHeads[i];
-                    overhead.Update(totalMS, frameMS);
-
-                    if (overhead.IsDestroyed)
-                        _overHeads.RemoveAt(i--);
-                }
-            }
         }
 
+        [MethodImpl(256)]
         public void AddToTile(int x, int y)
         {
             if (World.Map != null)
             {
                 if (Position != Position.INVALID)
-                    _tile?.RemoveGameObject(this);
+                    Tile?.RemoveGameObject(this);
 
-                _tile = World.Map.GetTile(x, y);
-                _tile?.AddGameObject(this);
+                if (!IsDestroyed)
+                {
+                    Tile = World.Map.GetTile(x, y);
+                    Tile?.AddGameObject(this);
+                }
             }
         }
 
-        public void AddToTile() => AddToTile(X, Y);
+        [MethodImpl(256)]
+        public void AddToTile()
+        {
+            AddToTile(X, Y);
+        }
 
+        [MethodImpl(256)]
         public void AddToTile(Tile tile)
         {
             if (World.Map != null)
             {
                 if (Position != Position.INVALID)
-                    _tile?.RemoveGameObject(this);
+                    Tile?.RemoveGameObject(this);
 
-                _tile = tile;
-                _tile?.AddGameObject(this);
+                if (!IsDestroyed)
+                {
+                    Tile = tile;
+                    Tile?.AddGameObject(this);
+                }
             }
         }
 
+        [MethodImpl(256)]
         public void RemoveFromTile()
         {
-            if (World.Map != null && _tile != null)
+            if (World.Map != null && Tile != null)
             {
-                _tile?.RemoveGameObject(this);
-                _tile = null;
+                Tile.RemoveGameObject(this);
+                Tile = null;
             }
         }
-      
 
-        public event EventHandler Disposed, OverheadAdded;
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void UpdateRealScreenPosition(Point offset)
+        public virtual void UpdateGraphicBySeason()
         {
-            RealScreenPosition.X = ScreenPosition.X - offset.X - 22;
-            RealScreenPosition.Y = ScreenPosition.Y - offset.Y - 22;
+
+        }
+
+        [MethodImpl(256)]
+        public void UpdateRealScreenPosition(int offsetX, int offsetY)
+        {
+            RealScreenPosition.X = _screenPosition.X - offsetX - 22;
+            RealScreenPosition.Y = _screenPosition.Y - offsetY - 22;
             IsPositionChanged = false;
         }
 
-        public int DistanceTo(GameObject entity) => Position.DistanceTo(entity.Position);
-
-        public TextOverhead AddOverhead(MessageType type, string message)
+        public int DistanceTo(GameObject entity)
         {
-            return AddOverhead(type, message, Engine.Profile.Current.ChatFont, Engine.Profile.Current.SpeechHue, true);
+            return Position.DistanceTo(entity.Position);
         }
 
-        public TextOverhead AddOverhead(MessageType type, string text, byte font, Hue hue, bool isunicode, float timeToLive = 0.0f)
+        public void AddMessage(MessageType type, string message)
+        {
+            AddMessage(type, message, Engine.Profile.Current.ChatFont, Engine.Profile.Current.SpeechHue, true);
+        }
+
+        public void UpdateTextCoords()
+        {
+            if (TextContainer == null)
+                return;
+
+            var last = TextContainer.Items;
+
+            while (last?.ListRight != null)
+                last = last.ListRight;
+
+            if (last == null)
+                return;
+
+            int offY = 0;
+
+            bool health = Engine.Profile.Current.ShowMobilesHP;
+            int alwaysHP = Engine.Profile.Current.MobileHPShowWhen;
+            int mode = Engine.Profile.Current.MobileHPType;
+
+            int startX = Engine.Profile.Current.GameWindowPosition.X + 6;
+            int startY = Engine.Profile.Current.GameWindowPosition.Y + 6;
+            var scene = Engine.SceneManager.GetScene<GameScene>();
+            float scale = scene?.Scale ?? 1;
+
+            for (; last != null; last = last.ListLeft)
+            {
+                if (last.RenderedText != null && !last.RenderedText.IsDestroyed)
+                {
+                    if (offY == 0 && last.Time < Engine.Ticks)
+                        continue;
+
+                    int x = RealScreenPosition.X;
+                    int y = RealScreenPosition.Y;
+
+                    if (this is Mobile m)
+                    {
+                        if (health && mode != 1 && ((alwaysHP >= 1 && m.Hits != m.HitsMax) || alwaysHP == 0))
+                        {
+                            y -= 22;
+                        }
+
+                        if (!m.IsMounted)
+                            y += 22;
+
+                        FileManager.Animations.GetAnimationDimensions(m.AnimIndex,
+                                                                      m.GetGraphicForAnimation(),
+                                                                      /*(byte) m.GetDirectionForAnimation()*/ 0,
+                                                                      /*Mobile.GetGroupForAnimation(m, isParent:true)*/ 0,
+                                                                      m.IsMounted,
+                                                                      /*(byte) m.AnimIndex*/ 0,
+                                                                      out _,
+                                                                      out int centerY,
+                                                                      out _,
+                                                                      out int height);
+                        x += (int)m.Offset.X;
+                        x += 22;
+                        y += (int)(m.Offset.Y - m.Offset.Z - (height + centerY + 8));
+                    }
+                    else if (this is Item it && it.Container.IsValid)
+                    {
+                        x = last.X - startX;
+                        y = last.Y - startY;
+                        scale = 1;
+                    }
+                    else if (Texture != null)
+                    {
+                        switch (this)
+                        {
+                            case Item _:
+
+                                if (Texture is ArtTexture t)
+                                    y -= t.ImageRectangle.Height >> 1;
+                                else
+                                    y -= Texture.Height >> 1;
+
+                                break;
+
+                            case Static _:
+                            case Multi _:
+                                y += 44;
+
+                                if (Texture is ArtTexture t1)
+                                    y -= t1.ImageRectangle.Height >> 1;
+                                else
+                                    y -= Texture.Height >> 1;
+
+                                break;
+
+                            default:
+                                y -= Texture.Height >> 1;
+                                break;
+                        }
+
+                        x += 22;
+                    }
+
+
+                   
+
+                    last.OffsetY = offY;
+                    offY += last.RenderedText.Height;
+
+                    last.RealScreenPosition.X = startX + (int) ((x - (last.RenderedText.Width >> 1)) / scale);
+                    last.RealScreenPosition.Y = startY + (int) ((y - offY) / scale);
+                }
+            }
+
+            FixTextCoordinatesInScreen();
+        }
+
+        private void FixTextCoordinatesInScreen()
+        {
+            if (this is Item it && it.Container.IsValid)
+                return;
+
+
+            int offsetY = 0;
+
+            int minX = Engine.Profile.Current.GameWindowPosition.X + 6;
+            int maxX = minX + Engine.Profile.Current.GameWindowSize.X;
+            int minY = Engine.Profile.Current.GameWindowPosition.Y;
+            //int maxY = minY + Engine.Profile.Current.GameWindowSize.Y - 6;
+
+            for (var item = TextContainer.Items; item != null; item = item.ListRight)
+            {
+                if (item.RenderedText == null || item.RenderedText.IsDestroyed || item.RenderedText.Texture == null || item.Time < Engine.Ticks)
+                    continue;
+
+                int startX = item.RealScreenPosition.X;
+                int endX = startX + item.RenderedText.Width;
+
+                if (startX < minX)
+                    item.RealScreenPosition.X += minX - startX;
+
+                if (endX > maxX)
+                    item.RealScreenPosition.X -= endX - maxX;
+
+                int startY = item.RealScreenPosition.Y;
+
+                if (startY < minY && offsetY == 0)
+                    offsetY = minY - startY;
+
+                //int endY = startY + item.RenderedText.Height;
+
+                //if (endY > maxY)
+                //    UseInRender = 0xFF;
+                //    //item.RealScreenPosition.Y -= endY - maxY;
+
+                if (offsetY != 0)
+                    item.RealScreenPosition.Y += offsetY;
+            }
+
+        }
+
+        public void AddMessage(MessageType type, string text, byte font, Hue hue, bool isunicode)
         {
             if (string.IsNullOrEmpty(text))
-                return null;
+                return;
 
-            TextOverhead overhead;
+            var msg = CreateMessage(text, hue, font, isunicode, type);
+            AddMessage(msg);
+        }
 
-            for (int i = 0; i < Overheads.Count; i++)
+        public void AddMessage(MessageInfo msg)
+        {
+            if (TextContainer == null)
+                TextContainer = new TextContainer();
+
+            msg.Owner = this;
+            TextContainer.Add(msg);
+
+            if (this is Item it && it.Container.IsValid)
             {
-                overhead = _overHeads[i];
-
-                if (type == MessageType.Label && overhead.Text == text && overhead.MessageType == type && !overhead.IsDestroyed)
-                {
-                    overhead.Hue = hue;
-                    _overHeads.RemoveAt(i);
-                    InsertGameText(overhead);
-
-                    return overhead;
-                }
+                UpdateTextCoords();
+            }
+            else
+            {
+                IsPositionChanged = true;
+                World.WorldTextManager.AddMessage(msg);
+            }
+        }
+        private static MessageInfo CreateMessage(string msg, ushort hue, byte font, bool isunicode, MessageType type)
+        {
+            if (Engine.Profile.Current != null && Engine.Profile.Current.OverrideAllFonts)
+            {
+                font = Engine.Profile.Current.ChatFont;
+                isunicode = Engine.Profile.Current.OverrideAllFontsIsUnicode;
             }
 
-            int width = isunicode ? FileManager.Fonts.GetWidthUnicode(font, text) : FileManager.Fonts.GetWidthASCII(font, text);
+            int width = isunicode ? FileManager.Fonts.GetWidthUnicode(font, msg) : FileManager.Fonts.GetWidthASCII(font, msg);
 
             if (width > 200)
-                width = isunicode ? FileManager.Fonts.GetWidthExUnicode(font, text, 200, TEXT_ALIGN_TYPE.TS_LEFT, (ushort) FontStyle.BlackBorder) : FileManager.Fonts.GetWidthExASCII(font, text, 200, TEXT_ALIGN_TYPE.TS_LEFT, (ushort) FontStyle.BlackBorder);
+                width = isunicode ? FileManager.Fonts.GetWidthExUnicode(font, msg, 200, TEXT_ALIGN_TYPE.TS_LEFT, (ushort)FontStyle.BlackBorder) : FileManager.Fonts.GetWidthExASCII(font, msg, 200, TEXT_ALIGN_TYPE.TS_LEFT, (ushort)FontStyle.BlackBorder);
             else
                 width = 0;
-            overhead = new TextOverhead(this, text, width, hue, font, isunicode, FontStyle.BlackBorder, timeToLive)
-            {
-                MessageType = type
-            };
 
-            InsertGameText(overhead);
-            int limit3text = 0;
-            for (int i = 0; i < _overHeads.Count; i++)
+            RenderedText rtext = RenderedText.Create(msg, hue, font, isunicode, FontStyle.BlackBorder, TEXT_ALIGN_TYPE.TS_LEFT, width, 30, false, false, true);
+
+            return new MessageInfo
             {
-                if (i <= 5)
-                {
-                    if (_overHeads[i].MessageType == MessageType.Limit3Spell)
-                    {
-                        limit3text++;
-                        if (limit3text > 3)
-                        {
-                            _overHeads[i].Destroy();
-                            _overHeads.RemoveAt(i);
-                            i--;
-                        }
-                    }
-                }
-                else
-                {
-                    _overHeads[i].Destroy();
-                    _overHeads.RemoveAt(i);
-                    i--;
-                }
+                Alpha = 255,
+                RenderedText = rtext,
+                Time = CalculateTimeToLive(rtext),
+                Type = type,
+                Hue = hue,
+            };
+        }
+
+        private static long CalculateTimeToLive(RenderedText rtext)
+        {
+            long timeToLive;
+
+            if (Engine.Profile.Current.ScaleSpeechDelay)
+            {
+                int delay = Engine.Profile.Current.SpeechDelay;
+
+                if (delay < 10)
+                    delay = 10;
+
+                timeToLive = (long)(4000 * rtext.LinesCount * delay / 100.0f);
+            }
+            else
+            {
+                long delay = (5497558140000 * Engine.Profile.Current.SpeechDelay) >> 32 >> 5;
+
+                timeToLive = (delay >> 31) + delay;
             }
 
-            OverheadAdded?.Raise(overhead);
+            timeToLive += Engine.Ticks;
 
-            return overhead;
+            return timeToLive;
         }
 
-        private void InsertGameText(TextOverhead gameText)
-        {
-            if (_overHeads.Count == 0 || _overHeads[0].MessageType != MessageType.Label)
-                _overHeads.AddToFront(gameText);
-            else
-                _overHeads.Insert(1, gameText);
-
-            //_overHeads.Insert(_overHeads.Count == 0 || _overHeads[0].MessageType != MessageType.Label ? 0 : 1, gameText);
-        }
 
         protected virtual void OnPositionChanged()
         {
-
         }
 
+        protected virtual void OnDirectionChanged()
+        {
+        }
 
         public virtual void Destroy()
         {
             if (IsDestroyed)
                 return;
 
+            Tile?.RemoveGameObject(this);
+            Tile = null;
+
+            TextContainer?.Clear();
+
             IsDestroyed = true;
-            Disposed.Raise();
-
-            _tile?.RemoveGameObject(this);
-            _tile = null;
-
-            if (_overHeads != null)
-            {
-                while (_overHeads.Count != 0)
-                    _overHeads.RemoveFromBack().Destroy();
-                _overHeads = null;
-            }
-
-            if (Left != null)
-            {
-                Left = null;
-            }
-
-            if (Right != null)
-            {
-                Right = null;
-            }
-
+            PriorityZ = 0;
+            IsPositionChanged = false;
+            Hue = 0;
+            AnimIndex = 0;
+            Offset = Vector3.Zero;
+            CurrentRenderIndex = 0;
+            UseInRender = 0;
+            RealScreenPosition = Point.Zero;
+            _screenPosition = Point.Zero;
+            _position = Position.INVALID;
+            IsFlipped = false;
+            Rotation = 0;
+            Graphic = 0;
+            UseObjectHandles = ClosedObjectHandles = ObjectHandlesOpened = false;
+            Bounds = Rectangle.Empty;
+            FrameInfo = Rectangle.Empty;
+            DrawTransparent = false;
+            
             Texture = null;
         }
     }
