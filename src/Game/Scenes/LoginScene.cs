@@ -304,7 +304,10 @@ namespace ClassicUO.Game.Scenes
         public void StartCharCreation()
         {
             if (CurrentLoginStep == LoginStep.CharacterSelection)
+            {
                 CurrentLoginStep = LoginStep.CharCreation;
+                Audio.PlayMusic(1);
+            }
         }
 
         public void CreateCharacter(PlayerMobile character, CityInfo startingCity, byte profession)
