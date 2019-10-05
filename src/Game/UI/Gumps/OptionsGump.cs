@@ -45,8 +45,6 @@ namespace ClassicUO.Game.UI.Gumps
 
         private const int WIDTH = 700;
         private const int HEIGHT = 500;
-
-        private readonly GameBorder _border;
         
         private static UOTexture _logoTexture2D;
         private ScrollAreaItem _activeChatArea;
@@ -135,8 +133,8 @@ namespace ClassicUO.Game.UI.Gumps
         {
             Add(new AlphaBlendControl(0.05f)
             {
-                X = -1,
-                Y = -1,
+                X = 0,
+                Y = 0,
                 Width = WIDTH + 1,
                 Height = HEIGHT + 1
             });

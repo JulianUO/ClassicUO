@@ -3114,10 +3114,6 @@ namespace ClassicUO.Network
                     Graphic graphic = p.ReadUShort();
                     Position position = new Position(p.ReadUShort(), p.ReadUShort(), p.ReadSByte());
 
-                    switch (type)
-                    {
-                    }
-
                     break;
 
                 //===========================================================================================
