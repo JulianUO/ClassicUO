@@ -49,10 +49,7 @@ namespace ClassicUO.Game.Managers
 
         public static string[] GetVars(int shardtype)
         {
-            if(shardtype != 2)
                 return Enum.GetNames(typeof(InfoBarVars));
-            else
-                return Enum.GetNames(typeof(InfoBarVarsOutlands));
         }
 
         public void AddItem(InfoBarItem ibi)

@@ -128,9 +128,9 @@ namespace ClassicUO.Game.UI.Gumps
 
                     break;
 
-                case 2: // outlands
+                case 2: // ascension
 
-                    gump = Engine.UI.GetGump<StatusGumpOutlands>();
+                    gump = Engine.UI.GetGump<StatusGumpModern>();
 
                     break;
 
@@ -164,10 +164,10 @@ namespace ClassicUO.Game.UI.Gumps
 
                     break;
 
-                case 2: // outlands
+                case 2: // ascension
 
-                    Engine.UI.Add(new StatusGumpOutlands
-                                      {X = x, Y = y});
+                    Engine.UI.Add(new StatusGumpModern
+                                      { X = x, Y = y });
 
                     break;
 
@@ -400,7 +400,10 @@ namespace ClassicUO.Game.UI.Gumps
             int xOffset = 0;
             _labels = new Label[(int) MobileStats.NumStats];
 
-            Add(new GumpPic(0, 0, 0x2A6C, 0));
+            if (Engine.GlobalSettings.ShardType == 2)
+                Add(new GumpPic(0, 0, 0x2A6E, 0));
+            else
+                Add(new GumpPic(0, 0, 0x2A6C, 0));
 
             if (FileManager.ClientVersion >= ClientVersions.CV_308Z)
             {
@@ -1120,7 +1123,7 @@ namespace ClassicUO.Game.UI.Gumps
         {
             base.Restore(reader);
 
-            if (Engine.GlobalSettings.ShardType != 2)
+            if (Engine.GlobalSettings.ShardType != 3)
                 Dispose();
         }
 

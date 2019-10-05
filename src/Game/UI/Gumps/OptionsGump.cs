@@ -46,6 +46,8 @@ namespace ClassicUO.Game.UI.Gumps
         private const int WIDTH = 700;
         private const int HEIGHT = 500;
 
+        private readonly GameBorder _border;
+        
         private static UOTexture _logoTexture2D;
         private ScrollAreaItem _activeChatArea;
         private Combobox _autoOpenCorpseOptions;
@@ -133,11 +135,16 @@ namespace ClassicUO.Game.UI.Gumps
         {
             Add(new AlphaBlendControl(0.05f)
             {
-                X = 1,
-                Y = 1,
-                Width = WIDTH - 2,
-                Height = HEIGHT - 2
+                X = -1,
+                Y = -1,
+                Width = WIDTH + 1,
+                Height = HEIGHT + 1
             });
+
+            Add(new ResizePic(0x06DB) { X = 0, Y = 0, Width = WIDTH, Height = HEIGHT });
+
+
+ 
 
 
             TextureControl tc = new TextureControl
@@ -168,31 +175,31 @@ namespace ClassicUO.Game.UI.Gumps
             Add(new NiceButton(10, 10 + 30 * 11, 140, 25, ButtonAction.SwitchPage, "Containers") { ButtonParameter = 13 });
 
 
-            Add(new Line(160, 5, 1, HEIGHT - 10, Color.Gray.PackedValue));
+            Add(new Line(155, 10, 1, HEIGHT - 20, Color.Gray.PackedValue));
 
-            int offsetX = 60;
+            int offsetX = 100;
             int offsetY = 60;
 
-            Add(new Line(160, 405 + 35 + 1, WIDTH - 160, 1, Color.Gray.PackedValue));
+            Add(new Line(160, 405 + 35 + 1, WIDTH - 170, 1, Color.Gray.PackedValue));
 
             Add(new Button((int) Buttons.Cancel, 0x00F3, 0x00F1, 0x00F2)
             {
-                X = 154 + offsetX, Y = 405 + offsetY, ButtonAction = ButtonAction.Activate
+                X = 154 + offsetX, Y = 397 + offsetY, ButtonAction = ButtonAction.Activate
             });
 
             Add(new Button((int) Buttons.Apply, 0x00EF, 0x00F0, 0x00EE)
             {
-                X = 248 + offsetX, Y = 405 + offsetY, ButtonAction = ButtonAction.Activate
+                X = 248 + offsetX, Y = 397 + offsetY, ButtonAction = ButtonAction.Activate
             });
 
             Add(new Button((int) Buttons.Default, 0x00F6, 0x00F4, 0x00F5)
             {
-                X = 346 + offsetX, Y = 405 + offsetY, ButtonAction = ButtonAction.Activate
+                X = 346 + offsetX, Y = 397 + offsetY, ButtonAction = ButtonAction.Activate
             });
 
             Add(new Button((int) Buttons.Ok, 0x00F9, 0x00F8, 0x00F7)
             {
-                X = 443 + offsetX, Y = 405 + offsetY, ButtonAction = ButtonAction.Activate
+                X = 443 + offsetX, Y = 397 + offsetY, ButtonAction = ButtonAction.Activate
             });
 
             AcceptMouseInput = true;
@@ -235,7 +242,7 @@ namespace ClassicUO.Game.UI.Gumps
         private void BuildGeneral()
         {
             const int PAGE = 1;
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             ScrollAreaItem fpsItem = new ScrollAreaItem();
             Label text = new Label("- FPS:", true, HUE_FONT);
@@ -394,7 +401,7 @@ namespace ClassicUO.Game.UI.Gumps
         {
             const int PAGE = 2;
 
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
 
             ScrollAreaItem item = new ScrollAreaItem();
@@ -452,7 +459,7 @@ namespace ClassicUO.Game.UI.Gumps
         {
             const int PAGE = 3;
 
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
             Label text;
 
             _debugControls = CreateCheckBox(rightArea, "Debugging mode", Engine.GlobalSettings.Debug, 0, 0);
@@ -580,7 +587,7 @@ namespace ClassicUO.Game.UI.Gumps
 
             item.Add(text);
 
-            _shardType = new Combobox(text.Width + 20, text.Y, 100, new[] {"Modern", "Old", "Outlands"})
+            _shardType = new Combobox(text.Width + 20, text.Y, 100, new[] {"Modern", "Old", "Ascension"})
             {
                 SelectedIndex = Engine.GlobalSettings.ShardType
             };
@@ -649,7 +656,6 @@ namespace ClassicUO.Game.UI.Gumps
         private void BuildCommands()
         {
             const int PAGE = 4;
-
             ScrollArea rightArea = new ScrollArea(190, 52 + 25 + 4, 150, 360, true);
             NiceButton addButton = new NiceButton(190, 20, 130, 20, ButtonAction.Activate, "New macro") {IsSelectable = false, ButtonParameter = (int) Buttons.NewMacro};
 
@@ -772,7 +778,7 @@ namespace ClassicUO.Game.UI.Gumps
         private void BuildTooltip()
         {
             const int PAGE = 5;
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
             ScrollAreaItem item = new ScrollAreaItem();
             Add(rightArea, PAGE);
         }
@@ -780,7 +786,7 @@ namespace ClassicUO.Game.UI.Gumps
         private void BuildFonts()
         {
             const int PAGE = 6;
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             ScrollAreaItem item = new ScrollAreaItem();
 
@@ -820,7 +826,7 @@ namespace ClassicUO.Game.UI.Gumps
         private void BuildSpeech()
         {
             const int PAGE = 7;
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             ScrollAreaItem item = new ScrollAreaItem();
 
@@ -888,7 +894,7 @@ namespace ClassicUO.Game.UI.Gumps
         {
             const int PAGE = 8;
 
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             _queryBeforAttackCheckbox = CreateCheckBox(rightArea, "Query before attack", Engine.Profile.Current.EnabledCriminalActionQuery, 0, 0);
             _spellFormatCheckbox = CreateCheckBox(rightArea, "Enable Overhead Spell Format", Engine.Profile.Current.EnabledSpellFormat, 0, 0);
@@ -925,7 +931,7 @@ namespace ClassicUO.Game.UI.Gumps
         private void BuildCounters()
         {
             const int PAGE = 9;
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             _enableCounters = CreateCheckBox(rightArea, "Enable Counters", Engine.Profile.Current.CounterBarEnabled, 0, 0);
             _highlightOnUse = CreateCheckBox(rightArea, "Highlight On Use", Engine.Profile.Current.CounterBarHighlightOnUse, 0, 0);
@@ -1016,7 +1022,7 @@ namespace ClassicUO.Game.UI.Gumps
         private void BuildExperimental()
         {
             const int PAGE = 10;
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             _enableSelectionArea = CreateCheckBox(rightArea, "Enable Text Selection Area", Engine.Profile.Current.EnableSelectionArea, 0, 0);
 
@@ -1171,7 +1177,7 @@ namespace ClassicUO.Game.UI.Gumps
         {
             const int PAGE = 11;
 
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             _showNetStats = CreateCheckBox(rightArea, "Show network stats", Engine.Profile.Current.ShowNetworkStats, 0, 0);
 
@@ -1182,7 +1188,7 @@ namespace ClassicUO.Game.UI.Gumps
         {
             const int PAGE = 12;
 
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             _showInfoBar = CreateCheckBox(rightArea, "Show Info Bar", Engine.Profile.Current.ShowInfoBar, 0, 0);
 
@@ -1237,7 +1243,7 @@ namespace ClassicUO.Game.UI.Gumps
         {
             const int PAGE = 13;
 
-            ScrollArea rightArea = new ScrollArea(190, 20, WIDTH - 210, 420, true);
+            ScrollArea rightArea = new ScrollArea(167, 12, WIDTH - 185, 422, true);
 
             ScrollAreaItem item = new ScrollAreaItem();
 
