@@ -1022,6 +1022,11 @@ namespace ClassicUO.Network
         }
     }
 
+    internal sealed class PStoreRequest : PacketWriter
+    {
+        public PStoreRequest() : base (0xFA) { }
+    }
+
     internal sealed class PMegaClilocRequestOld : PacketWriter
     {
         public PMegaClilocRequestOld(Serial serial) : base(0xBF)

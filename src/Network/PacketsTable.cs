@@ -279,7 +279,7 @@ namespace ClassicUO.Network
             -1, // f7
             0x6A, // f8
             -1, // f9
-            -1, // fa
+            0x01, // fa
             -1, // fb
             -1, // fc
             -1, // fd

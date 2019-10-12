@@ -40,74 +40,76 @@ namespace ClassicUO.Game.UI.Gumps
             CanCloseWithRightClick = false;
 
             // maximized view
-            Add(new ResizePic(9200)
+            Add(new ResizePic(1755)
             {
-                X = 0, Y = 0, Width = 610 + 63, Height = 27
+                X = 0, Y = 0, Width = 710 + 133, Height = 39
             }, 1);
 
-            Add(new Button(0, 5540, 5542, 5541)
+            Add(new Button(0, 1531, 1532)
             {
-                ButtonAction = ButtonAction.SwitchPage, ToPage = 2, X = 5, Y = 3
+                ButtonAction = ButtonAction.SwitchPage, ToPage = 2, X = 8, Y = 9
             }, 1);
 
-            Add(new Button((int) Buttons.Map, 2443, 2443, 0, "Map", 1, true, 0, 0x36)
+            Add(new Button((int) Buttons.Map, 1592, 1593, 0, "Map", 1, true, 0x0386, 0)
             {
-                ButtonAction = ButtonAction.Activate, X = 30, Y = 3, FontCenter = true
+                ButtonAction = ButtonAction.Activate, X = 32, Y = 7, FontCenter = true
             }, 1);
 
-            Add(new Button((int) Buttons.Paperdoll, 2445, 2445, 0, "Paperdoll", 1, true, 0, 0x36)
+            Add(new Button((int) Buttons.Paperdoll, 1588, 1589, 0, "Paperdoll", 1, true, 0x0386, 0)
             {
-                ButtonAction = ButtonAction.Activate, X = 93, Y = 3, FontCenter = true
+                ButtonAction = ButtonAction.Activate, X = 85, Y = 7, FontCenter = true
             }, 1);
 
-            Add(new Button((int) Buttons.Inventory, 2445, 2445, 0, "Inventory", 1, true, 0, 0x36)
+            Add(new Button((int) Buttons.Inventory, 1588, 1589, 0, "Inventario", 1, true, 0x0386, 0)
             {
-                ButtonAction = ButtonAction.Activate, X = 201, Y = 3, FontCenter = true
+                ButtonAction = ButtonAction.Activate, X = 200, Y = 7, FontCenter = true
             }, 1);
-
-            Add(new Button((int) Buttons.Journal, 2445, 2445, 0, "Journal", 1, true, 0, 0x36)
+            
+            Add(new Button((int) Buttons.Journal, 1588, 1589, 0, "Journal", 1, true, 0x0386, 0)
             {
-                ButtonAction = ButtonAction.Activate, X = 309, Y = 3, FontCenter = true
-            }, 1);
-
-            Add(new Button((int) Buttons.Chat, 2443, 2443, 0, "Chat", 1, true, 0, 0x36)
+                ButtonAction = ButtonAction.Activate, X = 315, Y = 7, FontCenter = true
+            }, 1); // 108
+            
+            Add(new Button((int) Buttons.Achievements, 1588, 1589, 0, "Achievements", 1, true, 0x0386, 0)
             {
-                ButtonAction = ButtonAction.Activate, X = 417, Y = 3, FontCenter = true
+                ButtonAction = ButtonAction.Activate, X = 430, Y = 7, FontCenter = true
             }, 1);
-
-            Add(new Button((int) Buttons.Help, 2443, 2443, 0, "Help", 1, true, 0, 0x36)
+            
+            Add(new Button((int) Buttons.Chat, 1592, 1593, 0, "Chat", 1, true, 0x0386, 0)
             {
-                ButtonAction = ButtonAction.Activate, X = 480, Y = 3, FontCenter = true
+                ButtonAction = ButtonAction.Activate, X = 545, Y = 7, FontCenter = true
             }, 1);
-
-            Add(new Button((int) Buttons.Debug, 2443, 2443, 0, "Debug", 1, true, 0, 0x36)
+            
+            Add(new Button((int) Buttons.Help, 1592, 1593, 0, "Help", 1, true, 0x0386, 0)
             {
-                ButtonAction = ButtonAction.Activate, X = 543, Y = 3, FontCenter = true
+                ButtonAction = ButtonAction.Activate, X = 600, Y = 7, FontCenter = true
             }, 1);
-
-            Add(new Button((int)Buttons.WorldMap, 2443, 2443, 0, "WorldMap", 1, true, 0, 0x36)
+            
+            Add(new Button((int) Buttons.Debug, 1592, 1593, 0, "Debug", 1, true, 0x0386, 0)
             {
-                ButtonAction = ButtonAction.Activate,
-                X = 607,
-                Y = 3,
-                FontCenter = true
+                ButtonAction = ButtonAction.Activate, X = 655, Y = 7, FontCenter = true
             }, 1);
-
+            
+            Add(new Button((int)Buttons.WorldMap, 1588, 1589, 0, "World Map", 1, true, 0x0386, 0)
+            {
+                ButtonAction = ButtonAction.Activate, X = 710, Y = 7, FontCenter = true
+            }, 1);
+            
             //minimized view
-            Add(new ResizePic(9200)
+            Add(new ResizePic(1755)
             {
                 X = 0,
                 Y = 0,
-                Width = 30,
-                Height = 27
+                Width = 40,
+                Height = 39
             }, 2);
 
-            Add(new Button(0, 5537, 5539, 5538)
+            Add(new Button(0, 1531, 1532)
             {
                 ButtonAction = ButtonAction.SwitchPage,
                 ToPage = 1,
-                X = 5,
-                Y = 3
+                X = 8,
+                Y = 9
             }, 2);
 
             //layer
@@ -234,6 +236,10 @@ namespace ClassicUO.Game.UI.Gumps
 
                     break;
 
+                case Buttons.Achievements:
+                    GameActions.RequestStore();
+                    break;
+
                 case Buttons.Debug:
 
                     DebugGump debugGump = Engine.UI.GetGump<DebugGump>();
@@ -281,6 +287,7 @@ namespace ClassicUO.Game.UI.Gumps
             Paperdoll,
             Inventory,
             Journal,
+            Achievements,
             Chat,
             Help,
             Debug,

@@ -225,6 +225,11 @@ namespace ClassicUO.Game
             Socket.Send(new PHelpRequest());
         }
 
+        public static void RequestStore()
+        {
+            Socket.Send(new PStoreRequest());
+        }
+
         public static void RequestQuestMenu()
         {
             Socket.Send(new PQuestMenuRequest());
