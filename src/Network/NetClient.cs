@@ -71,7 +71,7 @@ namespace ClassicUO.Network
                 if (localEntry.AddressList.Length > 0)
                 {
 #pragma warning disable 618
-                    address = (uint) localEntry.AddressList.FirstOrDefault(s => s.AddressFamily == AddressFamily.InterNetwork).Address;
+                    address = (uint)localEntry.AddressList.FirstOrDefault(s => s.AddressFamily == AddressFamily.InterNetwork).Address;
 #pragma warning restore 618
                 }
                 else
@@ -140,42 +140,24 @@ namespace ClassicUO.Network
             _recvEventArgs.SetBuffer(_recvBuffer, 0, _recvBuffer.Length);
             _recvQueue = new ConcurrentQueue<Packet>();
             Statistics.Reset();
+            SocketAsyncEventArgs connectEventArgs = new SocketAsyncEventArgs();
 
-
-            _socket.Connect(endpoint);
-
-            if (!IsConnected)
+            connectEventArgs.Completed += (sender, e) =>
             {
-                Log.Message(LogTypes.Error, "Unable to connect");
-                Disconnect();
-            }
-            else
-            {
-                Statistics.ConnectedFrom = Engine.CurrDateTime;
-                Connected.Raise();
-                StartRecv();
-            }
-
-            //SocketAsyncEventArgs connectEventArgs = new SocketAsyncEventArgs();
-
-            //connectEventArgs.Completed += (sender, e) =>
-            //{
-            //    if (e.SocketError == SocketError.Success)
-            //    {
-            //        Connected.Raise();
-            //        Statistics.ConnectedFrom = Engine.CurrDateTime;
-            //        StartRecv();
-            //    }
-            //    else
-            //    {
-            //        Log.Message(LogTypes.Error, e.SocketError.ToString());
-            //        Disconnect(e.SocketError);
-            //    }
-
-            //    connectEventArgs.Dispose();
-            //};
-            //connectEventArgs.RemoteEndPoint = endpoint;
-            //_socket.ConnectAsync(connectEventArgs);
+                if (e.SocketError == SocketError.Success)
+                {
+                    Connected.Raise();
+                    Statistics.ConnectedFrom = Engine.CurrDateTime;
+                    StartRecv();
+                }
+                else
+                {
+                    Log.Message(LogTypes.Error, e.SocketError.ToString());
+                    Disconnect(e.SocketError);
+                }
+            };
+            connectEventArgs.RemoteEndPoint = endpoint;
+            _socket.ConnectAsync(connectEventArgs);
         }
 
         public void Disconnect()
@@ -592,7 +574,7 @@ namespace ClassicUO.Network
         {
             if (e.BytesTransferred > 0 && e.SocketError == SocketError.Success)
             {
-                Statistics.TotalBytesSended += (uint) e.BytesTransferred;
+                Statistics.TotalBytesSended += (uint)e.BytesTransferred;
                 Statistics.TotalPacketsSended++;
             }
             else
