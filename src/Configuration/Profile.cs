@@ -129,6 +129,7 @@ namespace ClassicUO.Configuration
 
         // movements
         [JsonProperty] public bool EnablePathfind { get; set; }
+        [JsonProperty] public bool UseShiftToPathfind { get; set; }
         [JsonProperty] public bool AlwaysRun { get; set; }
         [JsonProperty] public bool SmoothMovements { get; set; } = true;
         [JsonProperty] public bool HoldDownKeyTab { get; set; } = true;
@@ -146,6 +147,7 @@ namespace ClassicUO.Configuration
         [JsonProperty] public Point TopbarGumpPosition { get; set; } = new Point(0, 0);
         [JsonProperty] public bool TopbarGumpIsMinimized { get; set; }
         [JsonProperty] public bool TopbarGumpIsDisabled { get; set; }
+        [JsonProperty] public bool UseAlternativeLights { get; set; }
         [JsonProperty] public bool UseCustomLightLevel { get; set; }
         [JsonProperty] public byte LightLevel { get; set; }
         [JsonProperty] public bool UseColoredLights { get; set; } = true;
