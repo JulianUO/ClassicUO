@@ -31,15 +31,11 @@ namespace ClassicUO.Game.UI.Gumps.Login
 {
     internal class LoginGump : Gump
     {
-        private readonly ushort _buttonNormal = 0x15A4;
-        private readonly ushort _buttonOver = 0x15A5;
         private readonly Checkbox _checkboxAutologin;
         private readonly Checkbox _checkboxSaveAccount;
         private readonly Button _nextArrow0;
         private readonly TextBox _textboxAccount;
         private readonly TextBox _textboxPassword;
-
-        private float _time;
 
         public LoginGump() : base(0, 0)
         {
@@ -47,37 +43,12 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
             AcceptKeyboardInput = false;
 
-            if (FileManager.ClientVersion >= ClientVersions.CV_500A)
-                // Full background
-                Add(new GumpPic(0, 0, 0x2329, 0));
-
-            // UO Flag
-            Add(new GumpPic(0, 4, 0x15A0, 0) { AcceptKeyboardInput = false });
-
-            //// Quit Button
-            Add(new Button((int) Buttons.Quit, 0x1589, 0x158B, 0x158A)
-            {
-                X = 555,
-                Y = 4,
-                ButtonAction = ButtonAction.Activate
-            });
-
-            // Login Panel
-            Add(new ResizePic(0x13BE)
-            {
-                X = 128,
-                Y = 288,
-                Width = 451,
-                Height = 157
-            });
-
-            if (FileManager.ClientVersion < ClientVersions.CV_500A)
-                Add(new GumpPic(286, 45, 0x058A, 0));
+            Add(new GumpPic(0, 0, 0x14E, 0));
 
             // Arrow Button
-            Add(_nextArrow0 = new Button((int) Buttons.NextArrow, 0x15A4, 0x15A6, 0x15A5)
+            Add(_nextArrow0 = new Button((int) Buttons.NextArrow, 0x0603, 0x604)
             {
-                X = 610,
+                X = 602,
                 Y = 445,
                 ButtonAction = ButtonAction.Activate
             });
@@ -85,8 +56,8 @@ namespace ClassicUO.Game.UI.Gumps.Login
             // Account Text Input Background
             Add(new ResizePic(0x0BB8)
             {
-                X = 328,
-                Y = 343,
+                X = 215,
+                Y = 282,
                 Width = 210,
                 Height = 30
             });
@@ -94,57 +65,50 @@ namespace ClassicUO.Game.UI.Gumps.Login
             // Password Text Input Background
             Add(new ResizePic(0x0BB8)
             {
-                X = 328,
-                Y = 383,
+                X = 215,
+                Y = 333,
                 Width = 210,
                 Height = 30
             });
 
-            Add(_checkboxAutologin = new Checkbox(0x00D2, 0x00D3, "Autologin", 1, 0x0386, false)
+
+            Add(new ResizePic(0x6DB)
+            {
+                X = 190,
+                Y = 410,
+                Width = 260,
+                Height = 40
+            });
+            
+
+            Add(_checkboxAutologin = new Checkbox(0x05FF, 0x0601, "Autologin", 3, 0, false)
             {
                 X = 200,
-                Y = 417
+                Y = 419
             });
 
-            Add(_checkboxSaveAccount = new Checkbox(0x00D2, 0x00D3, "Save Account", 1, 0x0386, false)
+            Add(_checkboxSaveAccount = new Checkbox(0x05FF, 0x0601, "Save Account", 3, 0, false)
             {
-                X = _checkboxAutologin.X + _checkboxAutologin.Width + 10,
-                Y = 417
+                X = _checkboxAutologin.X + _checkboxAutologin.Width + 14,
+                Y = 419
             });
 
             _checkboxSaveAccount.IsChecked = Engine.GlobalSettings.SaveAccount;
             _checkboxAutologin.IsChecked = Engine.GlobalSettings.AutoLogin;
-
-            Add(new Label("Log in to Ultima Online", false, 0x0386, font: 2)
-            {
-                X = 253,
-                Y = 305
-            });
-
-            Add(new Label("Account Name", false, 0x0386, font: 2)
-            {
-                X = 183,
-                Y = 345
-            });
-          
-            Add(new Label("Password", false, 0x0386, font: 2)
-            {
-                X = 183,
-                Y = 385
-            });
-
+            
             Add(new Label($"UO Version {Engine.GlobalSettings.ClientVersion}.", false, 0x034E, font: 9)
             {
-                X = 286,
+                X = 250,
                 Y = 453
             });
 
             Add(new Label($"ClassicUO Version {Engine.Version}", false, 0x034E, font: 9)
             {
-                X = 286,
+                X = 232,
                 Y = 465
             });
 
+            /*
             int htmlX = 130;
             int htmlY = 442;
 
@@ -159,25 +123,25 @@ namespace ClassicUO.Game.UI.Gumps.Login
                                 text: "<body link=\"#ad9413\" vlink=\"#00FF00\" ><a href=\"https://www.patreon.com/user?u=21694183\">> Become a Patreon!",
                                 0x32, true, isunicode: true, style: FontStyle.BlackBorder));
             
-
+            */
             // Text Inputs
             Add(_textboxAccount = new TextBox(5, 16, 190, 190, false)
             {
-                X = 335,
-                Y = 343,
+                X = 220,
+                Y = 282,
                 Width = 190,
                 Height = 25,
-                Hue = 0x034F,
+                Hue = 0x0455,
                 SafeCharactersOnly = true
             });
 
             Add(_textboxPassword = new TextBox(5, 16, 190, 190, false)
             {
-                X = 335,
-                Y = 385,
+                X = 220,
+                Y = 335,
                 Width = 190,
                 Height = 25,
-                Hue = 0x034F,
+                Hue = 0x0455,
                 IsPassword = true,
                 SafeCharactersOnly = true
             });
@@ -206,13 +170,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 return;
 
             base.Update(totalMS, frameMS);
-
-            if (_time < totalMS)
-            {
-                _time = (float) totalMS + 1000;
-                _nextArrow0.ButtonGraphicNormal = _nextArrow0.ButtonGraphicNormal == _buttonNormal ? _buttonOver : _buttonNormal;
-            }
-
+            
             if (_textboxPassword.HasKeyboardFocus)
             {
                 if (_textboxPassword.Hue != 0x0021)

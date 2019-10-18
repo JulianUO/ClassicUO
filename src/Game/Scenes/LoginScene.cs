@@ -405,7 +405,7 @@ namespace ClassicUO.Game.Scenes
 
             Characters = null;
             Servers = null;
-            PopupMessage = $"Connection lost:\n{e}";
+            PopupMessage = $"Conexion perdida!\n{e}";
             CurrentLoginStep = LoginStep.PopUpMessage;
         }
 
@@ -424,7 +424,7 @@ namespace ClassicUO.Game.Scenes
                     PopupMessage = $"Reconnect, please wait...`{_reconnectTryCounter}`\n`{e}`";
                 }
                 else
-                    PopupMessage = $"Connection lost:\n`{e}`";
+                    PopupMessage = $"Conexion perdida!\n`{e}`";
 
                 CurrentLoginStep = LoginStep.PopUpMessage;
             }

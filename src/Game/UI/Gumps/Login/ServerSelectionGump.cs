@@ -36,111 +36,46 @@ namespace ClassicUO.Game.UI.Gumps.Login
 {
     internal class ServerSelectionGump : Gump
     {
-        private const ushort SELECTED_COLOR = 0x0021;
-        private const ushort NORMAL_COLOR = 0x034F;
+        private const ushort SELECTED_COLOR = 0x0;
+        private const ushort NORMAL_COLOR = 0x0;
 
         public ServerSelectionGump() : base(0, 0)
         {
             //AddChildren(new LoginBackground(true));
 
-            Add(new Button((int) Buttons.Prev, 0x15A1, 0x15A3, 0x15A2)
+            Add(new Button((int) Buttons.Prev, 0x0605, 0x0606)
             {
-                X = 586, Y = 445, ButtonAction = ButtonAction.Activate
+                X = 575, Y = 445, ButtonAction = ButtonAction.Activate
             });
 
-            Add(new Button((int) Buttons.Next, 0x15A4, 0x15A6, 0x15A5)
+            Add(new Button((int) Buttons.Next, 0x603, 0x0604)
             {
-                X = 610, Y = 445, ButtonAction = ButtonAction.Activate
+                X = 602, Y = 445, ButtonAction = ButtonAction.Activate
+            });
+            
+            Add(new ResizePic(0x06DB)
+            {
+                X = 150,
+                Y = 90,
+                Width = 393 - 14,
+                Height = 300
             });
 
-            if (FileManager.ClientVersion >= ClientVersions.CV_500A)
-            {
-                ushort textColor = 0xFFFF;
-
-                Add(new Label(FileManager.Cliloc.GetString(1044579), true, textColor, font: 1)
-                {
-                    X = 155, Y = 70
-                }); // "Select which shard to play on:"
-
-                Add(new Label(FileManager.Cliloc.GetString(1044577), true, textColor, font: 1)
-                {
-                    X = 400, Y = 70
-                }); // "Latency:"
-
-                Add(new Label(FileManager.Cliloc.GetString(1044578), true, textColor, font: 1)
-                {
-                    X = 470, Y = 70
-                }); // "Packet Loss:"
-
-                Add(new Label(FileManager.Cliloc.GetString(1044580), true, textColor, font: 1)
-                {
-                    X = 153, Y = 368
-                }); // "Sort by:"
-            }
-            else
-            {
-                ushort textColor = 0x0481;
-
-                Add(new Label("Select which shard to play on:", true, textColor, font: 9)
-                {
-                    X = 155, Y = 70
-                });
-
-                Add(new Label("Latency:", true, textColor, font: 9)
-                {
-                    X = 400, Y = 70
-                });
-
-                Add(new Label("Packet Loss:", true, textColor, font: 9)
-                {
-                    X = 470, Y = 70
-                });
-
-                Add(new Label("Sort by:", true, textColor, font: 9)
-                {
-                    X = 153, Y = 368
-                });
-            }
-
-            Add(new Button((int) Buttons.SortTimeZone, 0x093B, 0x093C, 0x093D)
-            {
-                X = 230, Y = 366
-            });
-
-            Add(new Button((int) Buttons.SortFull, 0x093E, 0x093F, 0x0940)
-            {
-                X = 338, Y = 366
-            });
-
-            Add(new Button((int) Buttons.SortConnection, 0x0941, 0x0942, 0x0943)
-            {
-                X = 446, Y = 366
-            });
-
-            // World Pic Bg
-            Add(new GumpPic(150, 390, 0x0589, 0));
-
-            // Earth
-            Add(new Button((int) Buttons.Earth, 0x15E8, 0x15EA, 0x15E9)
-            {
-                X = 160, Y = 400, ButtonAction = ButtonAction.Activate
-            });
-
-            // Sever Scroll Area Bg
+            // Server Scroll Area Bg
             Add(new ResizePic(0x0DAC)
             {
-                X = 150, Y = 90, Width = 393 - 14, Height = 271
+                X = 170, Y = 110, Width = 393 - 14 - 40, Height = 300 - 40
             });
             // Sever Scroll Area
-            ScrollArea scrollArea = new ScrollArea(150, 100, 383, 271, true);
+            ScrollArea scrollArea = new ScrollArea(150, 130, 383, 271, true);
             LoginScene loginScene = Engine.SceneManager.GetScene<LoginScene>();
 
             foreach (ServerListEntry server in loginScene.Servers)
             {
                 HoveredLabel label;
-                scrollArea.Add(label = new HoveredLabel($"{server.Name}                         -           -", false, NORMAL_COLOR, SELECTED_COLOR, font: 5)
+                scrollArea.Add(label = new HoveredLabel($"{server.Name}                         -           -", false, NORMAL_COLOR, SELECTED_COLOR, font: 3)
                 {
-                    X = 74,
+                    X = 50,
                     //Y = 250
                 });
 
@@ -148,25 +83,6 @@ namespace ClassicUO.Game.UI.Gumps.Login
             }
 
             Add(scrollArea);
-
-            if (loginScene.Servers.Length > 0)
-            {
-                if (loginScene.Servers.Last().Index < loginScene.Servers.Count())
-                {
-                    Add(new Label(loginScene.Servers.Last().Name, false, 0x0481, font: 9)
-                    {
-                        X = 243, Y = 420
-                    });
-                }
-                else
-                {
-                    Add(new Label(loginScene.Servers.First().Name, false, 0x0481, font: 9)
-                    {
-                        X = 243, Y = 420
-                    });
-                }
-            }
-
             AcceptKeyboardInput = true;
             CanCloseWithRightClick = false;
         }
@@ -255,8 +171,8 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 _buttonId = entry.Index;
 
                 Add(_serverName = new HoveredLabel($"{entry.Name}     -      -" , false, NORMAL_COLOR, SELECTED_COLOR, font: 5));
-                _serverName.X = 74;
-                _serverName.Y = 250;
+                _serverName.X = 50;
+                _serverName.Y = 310;
 
                 AcceptMouseInput = true;
                 Width = 393;

@@ -50,36 +50,44 @@ namespace ClassicUO.Game.UI.Gumps.Login
             CanCloseWithRightClick = false;
             CanCloseWithEsc = false;
 
-            Label label = new Label(labelText, false, 0x0386, 326, 2, align: TEXT_ALIGN_TYPE.TS_CENTER)
+            Label label = new Label(labelText, false, 0, 326, 3, align: TEXT_ALIGN_TYPE.TS_CENTER)
             {
-                X = 162,
+                X = 173,
                 Y = 178
             };
 
-            Add(new ResizePic(0x0A28)
+            Add(new ResizePic(0x06DB)
             {
-                X = 142, Y = 134, Width = 366, Height = 212
+                X = 150, Y = 134, Width = 379, Height = 212
+            });
+
+            Add(new ResizePic(0x0DAC)
+            {
+                X = 170,
+                Y = 154,
+                Width = 379 - 40,
+                Height = 212 - 40
             });
 
             Add(label);
 
             if (showButtons == Buttons.OK)
             {
-                Add(new Button((int) Buttons.OK, 0x0481, 0x0483, 0x0482)
+                Add(new Button((int) Buttons.OK, 0x0601, 0x0602)
                 {
-                    X = 306, Y = 304, ButtonAction = ButtonAction.Activate
+                    X = 327, Y = 285, ButtonAction = ButtonAction.Activate
                 });
             }
             else if (showButtons == (Buttons.OK | Buttons.Cancel))
             {
-                Add(new Button((int) Buttons.OK, 0x0481, 0x0483, 0x0482)
+                Add(new Button((int) Buttons.OK, 0x0601, 0x0602)
                 {
-                    X = 264, Y = 304, ButtonAction = ButtonAction.Activate
+                    X = 310, Y = 285, ButtonAction = ButtonAction.Activate
                 });
 
-                Add(new Button((int) Buttons.Cancel, 0x047E, 0x0480, 0x047F)
+                Add(new Button((int) Buttons.Cancel, 0x05FF, 0x0600)
                 {
-                    X = 348, Y = 304, ButtonAction = ButtonAction.Activate
+                    X = 324, Y = 285, ButtonAction = ButtonAction.Activate
                 });
             }
 
