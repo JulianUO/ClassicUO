@@ -68,7 +68,7 @@ namespace ClassicUO.Game.UI.Gumps
                 return;
 
             Direction dir = (Direction) GameCursor.GetMouseDirection(World.Player.X, World.Player.Y, _mx, _my, 0);
-            ushort gumpID = (ushort) (0x1194 + ((int) dir + 1) % 8);
+            ushort gumpID = (ushort) (0x118C + ((int) dir + 1) % 8);
 
             if (_direction != dir || _arrow == null)
             {
