@@ -114,6 +114,8 @@ namespace ClassicUO.Game.UI.Gumps
 
             _background = _hpLineRed = _manaLineRed = _stamLineRed = null;
             _buttonHeal1 = _buttonHeal2 = null;
+            
+            _textBox?.Dispose();
             _textBox = null;
 
             BuildGump();
@@ -175,6 +177,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                         if (_canChangeName)
                             _textBox.MouseUp -= TextBoxOnMouseUp;
+                        _textBox.IsEditable = false;
                     }
 
                     if (_background.Hue != 0)
@@ -201,6 +204,19 @@ namespace ClassicUO.Game.UI.Gumps
                     Dispose();
 
                     return;
+                }
+
+                if (entity is Mobile mm && _canChangeName != mm.IsRenamable)
+                {
+                    _canChangeName = mm.IsRenamable;
+                    _textBox.MouseUp -= TextBoxOnMouseUp;
+
+                    if (_canChangeName)
+                    {
+                        _textBox.MouseUp += TextBoxOnMouseUp;
+                    }
+                    else
+                        _textBox.IsEditable = false;
                 }
 
                 if (!(mobile != null && mobile.IsDead) && _isDead) _isDead = false;

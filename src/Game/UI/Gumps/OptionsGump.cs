@@ -1,4 +1,4 @@
-﻿#region license
+#region license
 
 //  Copyright (C) 2019 ClassicUO Development Community on Github
 //
@@ -50,7 +50,7 @@ namespace ClassicUO.Game.UI.Gumps
         private ScrollAreaItem _activeChatArea;
         private Combobox _autoOpenCorpseOptions;
         private TextBox _autoOpenCorpseRange;
-        private Checkbox _castSpellsByOneClick, _queryBeforAttackCheckbox, _spellColoringCheckbox, _spellFormatCheckbox;
+        private Checkbox _buffBarTime,_castSpellsByOneClick, _queryBeforAttackCheckbox, _spellColoringCheckbox, _spellFormatCheckbox;
         private HSliderBar _cellSize;
 
         // video
@@ -65,7 +65,7 @@ namespace ClassicUO.Game.UI.Gumps
         private TextBox _rows, _columns, _highlightAmount, _abbreviatedAmount;
 
         //experimental
-        private Checkbox _enableSelectionArea, _debugGumpIsDisabled, _restoreLastGameSize, _autoOpenDoors, _autoOpenCorpse, _disableTabBtn, _disableCtrlQWBtn, _disableDefaultHotkeys, _disableArrowBtn, _overrideContainerLocation, _smoothDoors, _showTargetRangeIndicator;
+        private Checkbox _enableSelectionArea, _debugGumpIsDisabled, _restoreLastGameSize, _autoOpenDoors, _autoOpenCorpse, _disableTabBtn, _disableCtrlQWBtn, _disableDefaultHotkeys, _disableArrowBtn, _overrideContainerLocation, _smoothDoors, _showTargetRangeIndicator, _customBars, _customBarsBBG;
         private Combobox _overrideContainerLocationSetting;
 
         // sounds
@@ -127,7 +127,7 @@ namespace ClassicUO.Game.UI.Gumps
 
         // containers
         private HSliderBar _containersScale;
-        private Checkbox _containerScaleItems;
+        private Checkbox _containerScaleItems, _containerDoubleClickToLoot;
 
         public OptionsGump() : base(0, 0)
         {
@@ -302,7 +302,7 @@ namespace ClassicUO.Game.UI.Gumps
             };
             _useCircleOfTransparency.ValueChanged += (sender, e) => { _circleOfTranspRadius.IsVisible = _useCircleOfTransparency.IsChecked; };
             item.Add(_useCircleOfTransparency);
-            _circleOfTranspRadius = new HSliderBar(210, _useCircleOfTransparency.Y + 5, 50, Constants.MIN_CIRCLE_OF_TRANSPARENCY_RADIUS, Constants.MAX_CIRCLE_OF_TRANSPARENCY_RADIUS, Engine.Profile.Current.CircleOfTransparencyRadius, HSliderBarStyle.MetalWidgetRecessedBar, true, FONT, HUE_FONT);
+            _circleOfTranspRadius = new HSliderBar(210, _useCircleOfTransparency.Y + 5, 200, Constants.MIN_CIRCLE_OF_TRANSPARENCY_RADIUS, Constants.MAX_CIRCLE_OF_TRANSPARENCY_RADIUS, Engine.Profile.Current.CircleOfTransparencyRadius, HSliderBarStyle.MetalWidgetRecessedBar, true, FONT, HUE_FONT);
             item.Add(_circleOfTranspRadius);
             rightArea.Add(item);
 
@@ -953,6 +953,7 @@ namespace ClassicUO.Game.UI.Gumps
             _spellFormatCheckbox = CreateCheckBox(rightArea, "Enable Overhead Spell Format", Engine.Profile.Current.EnabledSpellFormat, 0, 0);
             _spellColoringCheckbox = CreateCheckBox(rightArea, "Enable Overhead Spell Hue", Engine.Profile.Current.EnabledSpellHue, 0, 0);
             _castSpellsByOneClick = CreateCheckBox(rightArea, "Cast spells by one click", Engine.Profile.Current.CastSpellsByOneClick, 0, 0);
+            _buffBarTime = CreateCheckBox(rightArea, "Show buff duration", Engine.Profile.Current.BuffBarTime, 0, 0);
 
             _innocentColorPickerBox = CreateClickableColorBox(rightArea, 0, 20, Engine.Profile.Current.InnocentHue, "Innocent Color", 20, 20);
             _friendColorPickerBox = CreateClickableColorBox(rightArea, 0, 0, Engine.Profile.Current.FriendHue, "Friend Color", 20, 0);
@@ -1220,6 +1221,9 @@ namespace ClassicUO.Game.UI.Gumps
 
             rightArea.Add(_showTargetRangeIndicator);
 
+            _customBars = CreateCheckBox(rightArea, "Use Custom Health Bars", Engine.Profile.Current.CustomBarsToggled, 0, 5);
+            _customBarsBBG = CreateCheckBox(rightArea, "Use All Black Backgrounds", Engine.Profile.Current.CBBlackBGToggled, 20, 5);
+
             Add(rightArea, PAGE);
 
             _autoOpenCorpseArea.IsVisible = _autoOpenCorpse.IsChecked;
@@ -1309,7 +1313,8 @@ namespace ClassicUO.Game.UI.Gumps
             rightArea.Add(item);
 
             _containerScaleItems = CreateCheckBox(rightArea, "Scale items inside containers", Engine.Profile.Current.ScaleItemsInsideContainers, 0, 20);
-
+            _containerDoubleClickToLoot = CreateCheckBox(rightArea, "Double click to loot items inside containers", Engine.Profile.Current.DoubleClickToLootInsideContainers, 0, 0);
+            
             Add(rightArea, PAGE);
         }
 
@@ -1486,6 +1491,7 @@ namespace ClassicUO.Game.UI.Gumps
                     _enemyColorPickerBox.SetColor(0x0031, FileManager.Hues.GetPolygoneColor(12, 0x0031));
                     _queryBeforAttackCheckbox.IsChecked = true;
                     _castSpellsByOneClick.IsChecked = false;
+                    _buffBarTime.IsChecked = false;
                     _beneficColorPickerBox.SetColor(0x0059, FileManager.Hues.GetPolygoneColor(12, 0x0059));
                     _harmfulColorPickerBox.SetColor(0x0020, FileManager.Hues.GetPolygoneColor(12, 0x0020));
                     _neutralColorPickerBox.SetColor(0x03B1, FileManager.Hues.GetPolygoneColor(12, 0x03B1));
@@ -1521,6 +1527,8 @@ namespace ClassicUO.Game.UI.Gumps
                     _overrideContainerLocationSetting.SelectedIndex = 0;
                     _dragSelectHumanoidsOnly.IsChecked = false;
                     _showTargetRangeIndicator.IsChecked = false;
+                    _customBars.IsChecked = false;
+                    _customBarsBBG.IsChecked = false;
 
                     break;
 
@@ -1536,6 +1544,7 @@ namespace ClassicUO.Game.UI.Gumps
                 case 13:
                     _containersScale.Value = 100;
                     _containerScaleItems.IsChecked = false;
+                    _containerDoubleClickToLoot.IsChecked = false;
                     break;
             }
         }
@@ -1816,6 +1825,7 @@ namespace ClassicUO.Game.UI.Gumps
             Engine.Profile.Current.MurdererHue = _murdererColorPickerBox.Hue;
             Engine.Profile.Current.EnabledCriminalActionQuery = _queryBeforAttackCheckbox.IsChecked;
             Engine.Profile.Current.CastSpellsByOneClick = _castSpellsByOneClick.IsChecked;
+            Engine.Profile.Current.BuffBarTime = _buffBarTime.IsChecked;
 
             Engine.Profile.Current.BeneficHue = _beneficColorPickerBox.Hue;
             Engine.Profile.Current.HarmfulHue = _harmfulColorPickerBox.Hue;
@@ -1922,6 +1932,36 @@ namespace ClassicUO.Game.UI.Gumps
 
             Engine.Profile.Current.ShowTargetRangeIndicator = _showTargetRangeIndicator.IsChecked;
 
+
+            bool updateHealthBars = Engine.Profile.Current.CustomBarsToggled != _customBars.IsChecked;
+            Engine.Profile.Current.CustomBarsToggled = _customBars.IsChecked;
+
+            if (updateHealthBars)
+            {
+                if (Engine.Profile.Current.CustomBarsToggled)
+                {
+                    var hbgstandard = Engine.UI.Gumps.OfType<HealthBarGump>().ToList();
+
+                    foreach (var healthbar in hbgstandard)
+                    {
+                        Engine.UI.Add(new HealthBarGumpCustom(healthbar.LocalSerial) {X = healthbar.X, Y = healthbar.Y});
+                        healthbar.Dispose();
+                    }
+                }
+                else
+                {
+                    var hbgcustom = Engine.UI.Gumps.OfType<HealthBarGumpCustom>().ToList();
+
+                    foreach (var customhealthbar in hbgcustom)
+                    {
+                        Engine.UI.Add(new HealthBarGump(customhealthbar.LocalSerial) {X = customhealthbar.X, Y = customhealthbar.Y});
+                        customhealthbar.Dispose();
+                    }
+                }
+            }
+
+            Engine.Profile.Current.CBBlackBGToggled = _customBarsBBG.IsChecked;
+
             // network
             Engine.Profile.Current.ShowNetworkStats = _showNetStats.IsChecked;
 
@@ -1980,6 +2020,8 @@ namespace ClassicUO.Game.UI.Gumps
                     resizableGump.ForceUpdate();
                 }
             }
+
+            Engine.Profile.Current.DoubleClickToLootInsideContainers = _containerDoubleClickToLoot.IsChecked;
 
             Engine.Profile.Current?.Save(Engine.UI.Gumps.OfType<Gump>().Where(s => s.CanBeSaved).Reverse().ToList());
         }
