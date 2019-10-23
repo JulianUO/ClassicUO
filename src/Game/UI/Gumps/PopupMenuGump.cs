@@ -40,7 +40,7 @@ namespace ClassicUO.Game.UI.Gumps
             //ControlInfo.ModalClickOutsideAreaClosesThisControl = true;
             CanMove = false;
 
-            ResizePic pic = new ResizePic(0x0A3C)
+            ResizePic pic = new ResizePic(0x06DB)
             {
                 Alpha = 0.25f
             };
@@ -70,7 +70,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 Label label = new Label(text, true, 0xFFFF, font: 1)
                 {
-                    X = 10, Y = offsetY
+                    X = 11, Y = offsetY
                 };
                 FileManager.Fonts.SetUseHTML(false);
 

@@ -29,7 +29,7 @@ namespace ClassicUO.Game.Data
     {
         public CharacterListFlags Flags { get; private set; }
 
-        public bool TooltipsEnabled { get; private set; } = true;
+        public bool TooltipsEnabled { get; private set; } = false;
         public bool PopupEnabled { get; private set; }
         public bool PaperdollBooks { get; private set; }
         public bool OnePerson { get; private set; }
