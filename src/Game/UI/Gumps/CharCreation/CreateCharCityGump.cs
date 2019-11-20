@@ -37,12 +37,7 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
     {
         private static readonly MapInfo[] _mapInfo =
         {
-            new MapInfo(0, "Felucca", 5593, 0x1400, 0x0000, 0x1000, 0x0000),
-            new MapInfo(1, "Trammel", 5594, 0x1400, 0x0000, 0x1000, 0x0000),
-            new MapInfo(2, "Ilshenar", 5595, 0x0900, 0x0200, 0x0640, 0x0000),
-            new MapInfo(3, "Malas", 5596, 0x0A00, 0x0000, 0x0800, 0x0000),
-            new MapInfo(4, "Tokuno", 5597, 0x05A8, 0x0000, 0x05A8, 0x0000),
-            new MapInfo(5, "Ter Mur", 5598, 0x0500, 0x0100, 0x1000, 0x0AC0)
+            new MapInfo(0, "Sosaria", 5593, 0x1400, 0x0000, 0x1000, 0x0000),
         };
 
         private readonly Dictionary<uint, CityCollection> _maps;
@@ -82,36 +77,20 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
                 return;
             }
 
-            //why we make calculations on program if it could be done outside?
-            var mapCenterX = 253; //393 / 2 + 57;
-
-            Add(new Button((int) Buttons.PreviousCollection, 0x15A1, 0x15A3, 0x15A2)
+            Add(new Button((int) Buttons.PreviousScreen, 0x0605, 0x0606)
             {
-                X = mapCenterX - 65,
-                Y = 440,
+                X = 575,
+                Y = 445,
                 ButtonAction = ButtonAction.Activate
             });
 
-            Add(new Button((int) Buttons.NextCollection, 0x15A4, 0x15A6, 0x15A5)
+            Add(new Button((int) Buttons.Finish, 0x603, 0x0604)
             {
-                X = mapCenterX + 50,
-                Y = 440,
+                X = 602,
+                Y = 445,
                 ButtonAction = ButtonAction.Activate
             });
 
-            Add(new Button((int) Buttons.PreviousScreen, 0x15A1, 0x15A3, 0x15A2)
-            {
-                X = 586,
-                Y = 435,
-                ButtonAction = ButtonAction.Activate
-            });
-
-            Add(new Button((int) Buttons.Finish, 0x15A4, 0x15A6, 0x15A5)
-            {
-                X = 610,
-                Y = 435,
-                ButtonAction = ButtonAction.Activate
-            });
         }
 
         public int SelectedMapIndex
@@ -299,14 +278,8 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
                     }
                 }
 
-                if (FileManager.ClientVersion == ClientVersions.CV_70130)
-                {
-                    Add(new GumpPic(5, 5, _mapInfo.Gump, 0));
-                    Add(new GumpPic(0, 0, 0x15DF, 0));
-                }
-                else
-                    Add(new GumpPic(0, 0, 0x1598, 0));
-
+                Add(new GumpPic(5, 5, 0x15D9, 0));
+                Add(new GumpPic(0, 0, 0x15DF, 0));
 
                 var width = 393;
                 var height = 393;

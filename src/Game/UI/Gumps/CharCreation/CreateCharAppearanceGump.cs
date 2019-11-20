@@ -36,10 +36,7 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
 {
     internal class CreateCharAppearanceGump : Gump
     {
-        private readonly RadioButton _elfRadio;
         private readonly RadioButton _femaleRadio;
-        private readonly RadioButton _gargoyleRadio;
-        private readonly RadioButton _humanRadio;
         private readonly RadioButton _maleRadio;
         private readonly TextBox _nameTextBox;
         private readonly Dictionary<Layer, Tuple<int, Hue>> CurrentColorOption = new Dictionary<Layer, Tuple<int, Hue>>();
@@ -77,24 +74,24 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
             // Male/Female Radios
             Add(_maleRadio = new RadioButton(0, 0x0768, 0x0767)
             {
-                X = 425, Y = 435
+                X = 100, Y = 435
             }, 1);
             _maleRadio.ValueChanged += Genre_ValueChanged;
 
             Add(_femaleRadio = new RadioButton(0, 0x0768, 0x0767)
             {
-                X = 425, Y = 455
+                X = 100, Y = 455
             }, 1);
             _femaleRadio.ValueChanged += Genre_ValueChanged;
 
             Add(new Button((int) Buttons.MaleButton, 0x0710, 0x0712, 0x0711)
             {
-                X = 445, Y = 435, ButtonAction = ButtonAction.Activate
+                X = 120, Y = 435, ButtonAction = ButtonAction.Activate
             }, 1);
 
             Add(new Button((int) Buttons.FemaleButton, 0x070D, 0x070F, 0x070E)
             {
-                X = 445, Y = 455, ButtonAction = ButtonAction.Activate
+                X = 120, Y = 455, ButtonAction = ButtonAction.Activate
             }, 1);
 
             Add(_nameTextBox = new TextBox(5, 16, 0, 200, false, hue: 1, style: FontStyle.Fixed)
@@ -103,43 +100,6 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
                 ValidationRules = (uint) (Constants.RULES.LETTER | Constants.RULES.SPACE)
             }, 1);
             _nameTextBox.SetText(string.Empty);
-
-            // Races
-            Add(_humanRadio = new RadioButton(1, 0x0768, 0x0767)
-            {
-                X = 180, Y = 435
-            }, 1);
-
-            Add(new Button((int) Buttons.HumanButton, 0x0702, 0x0704, 0x0703)
-            {
-                X = 200, Y = 435, ButtonAction = ButtonAction.Activate
-            }, 1);
-            _humanRadio.ValueChanged += Race_ValueChanged;
-
-            Add(_elfRadio = new RadioButton(1, 0x0768, 0x0767)
-            {
-                X = 180, Y = 455
-            }, 1);
-
-            Add(new Button((int) Buttons.ElfButton, 0x0705, 0x0707, 0x0706)
-            {
-                X = 200, Y = 455, ButtonAction = ButtonAction.Activate
-            }, 1);
-            _elfRadio.ValueChanged += Race_ValueChanged;
-
-            if (FileManager.ClientVersion >= ClientVersions.CV_60144)
-            {
-                Add(_gargoyleRadio = new RadioButton(1, 0x0768, 0x0767)
-                {
-                    X = 60, Y = 435
-                }, 1);
-
-                Add(new Button((int) Buttons.GargoyleButton, 0x07D3, 0x07D5, 0x07D4)
-                {
-                    X = 80, Y = 435, ButtonAction = ButtonAction.Activate
-                }, 1);
-                _gargoyleRadio.ValueChanged += Race_ValueChanged;
-            }
 
             // Prev/Next
             Add(new Button((int) Buttons.Prev, 0x15A1, 0x15A3, 0x15A2)
@@ -152,7 +112,6 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
                 X = 610, Y = 445, ButtonAction = ButtonAction.Activate
             }, 1);
             _maleRadio.IsChecked = true;
-            _humanRadio.IsChecked = true;
         }
 
         private PlayerMobile CreateCharacter(bool isFemale, RaceType race)
@@ -163,56 +122,21 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
             };
 
             if (isFemale)
-                character.Flags |= Flags.Female;
-
-            switch (race)
             {
-                case RaceType.GARGOYLE:
-                    character.Graphic = isFemale ? (Graphic) 0x029B : (Graphic) 0x029A;
-
-                    character.Equipment[(int) Layer.Robe] = CreateItem(0x4001, CurrentColorOption[Layer.Shirt].Item2, Layer.Robe);
-
-                    break;
-
-                case RaceType.ELF when isFemale:
-                    character.Graphic = 0x025E;
-                    character.Equipment[(int) Layer.Shoes] = CreateItem(0x1710, 0x0384, Layer.Shoes);
-                    character.Equipment[(int) Layer.Skirt] = CreateItem(0x1531, CurrentColorOption[Layer.Pants].Item2, Layer.Skirt);
-                    character.Equipment[(int) Layer.Shirt] = CreateItem(0x1518, CurrentColorOption[Layer.Shirt].Item2, Layer.Shirt);
-
-                    break;
-
-                case RaceType.ELF:
-                    character.Graphic = 0x025D;
-                    character.Equipment[(int) Layer.Shoes] = CreateItem(0x1710, 0x0384, Layer.Shoes);
-                    character.Equipment[(int) Layer.Pants] = CreateItem(0x152F, CurrentColorOption[Layer.Pants].Item2, Layer.Pants);
-                    character.Equipment[(int) Layer.Shirt] = CreateItem(0x1518, CurrentColorOption[Layer.Shirt].Item2, Layer.Shirt);
-
-                    break;
-
-                default:
-
-                {
-                    if (isFemale)
-                    {
-                        character.Graphic = 0x0191;
-                        character.Equipment[(int) Layer.Shoes] = CreateItem(0x1710, 0x0384, Layer.Shoes);
-                        character.Equipment[(int) Layer.Skirt] = CreateItem(0x1531, CurrentColorOption[Layer.Pants].Item2, Layer.Skirt);
-                        character.Equipment[(int) Layer.Shirt] = CreateItem(0x1518, CurrentColorOption[Layer.Shirt].Item2, Layer.Shirt);
-                    }
-                    else
-                    {
-                        character.Graphic = 0x0190;
-                        character.Equipment[(int) Layer.Shoes] = CreateItem(0x1710, 0x0384, Layer.Shoes);
-                        character.Equipment[(int) Layer.Pants] = CreateItem(0x152F, CurrentColorOption[Layer.Pants].Item2, Layer.Pants);
-                        character.Equipment[(int) Layer.Shirt] = CreateItem(0x1518, CurrentColorOption[Layer.Shirt].Item2, Layer.Shirt);
-                    }
-
-                    break;
-                }
+                character.Flags |= Flags.Female;
+                character.Graphic = 0x0191;
+                character.Equipment[(int) Layer.Shoes] = CreateItem(0x1710, 0x0384, Layer.Shoes);
+                character.Equipment[(int) Layer.Skirt] = CreateItem(0x1531, CurrentColorOption[Layer.Pants].Item2, Layer.Skirt);
+                character.Equipment[(int) Layer.Shirt] = CreateItem(0x1518, CurrentColorOption[Layer.Shirt].Item2, Layer.Shirt);
             }
-
-
+            else
+            {
+                character.Graphic = 0x0190;
+                character.Equipment[(int) Layer.Shoes] = CreateItem(0x1710, 0x0384, Layer.Shoes);
+                character.Equipment[(int) Layer.Pants] = CreateItem(0x152F, CurrentColorOption[Layer.Pants].Item2, Layer.Pants);
+                character.Equipment[(int) Layer.Shirt] = CreateItem(0x1518, CurrentColorOption[Layer.Shirt].Item2, Layer.Shirt);
+            }
+   
             return character;
         }
 
@@ -401,21 +325,6 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
 
                     break;
 
-                case Buttons.HumanButton:
-                    _humanRadio.IsChecked = true;
-
-                    break;
-
-                case Buttons.ElfButton:
-                    _elfRadio.IsChecked = true;
-
-                    break;
-
-                case Buttons.GargoyleButton:
-                    _gargoyleRadio.IsChecked = true;
-
-                    break;
-
                 case Buttons.Next:
                     _character.Name = _nameTextBox.Text;
 
@@ -447,16 +356,7 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
 
         private RaceType GetSelectedRace()
         {
-            if (_humanRadio.IsChecked)
-                return RaceType.HUMAN;
-
-            if (_elfRadio != null && _elfRadio.IsChecked)
-                return RaceType.ELF;
-
-            if (_gargoyleRadio != null && _gargoyleRadio.IsChecked)
-                return RaceType.GARGOYLE;
-
-            return RaceType.HUMAN;
+           return RaceType.HUMAN;
         }
 
         private Item CreateItem(int id, Hue hue, Layer layer)
