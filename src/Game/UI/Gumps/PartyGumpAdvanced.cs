@@ -23,6 +23,7 @@
 
 using System.Collections.Generic;
 
+using ClassicUO.Configuration;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
 using ClassicUO.Game.UI.Controls;
@@ -369,25 +370,12 @@ namespace ClassicUO.Game.UI.Gumps
             Add(_status = new GumpPic(240, 0, 0x29F6, (Hue)(mobile != null && mobile.IsDead ? 0 : 0x43)));
 
             //======================================================
-            if (Engine.Profile.Current.CustomBarsToggled == true)
+            Button pmButton = new Button((int)Buttons.GetBar, 0xFAE, 0xFAF, 0xFB0)
             {
-                Button cpmButton = new Button((int)Buttons.GetBar, 0xFAE, 0xFAF, 0xFB0)
-                {
-                    X = 10,
-                    ButtonAction = ButtonAction.Activate
-                };
-                Add(cpmButton);
-            }
-            else
-            {
-                Button pmButton = new Button((int)Buttons.GetBar, 0xFAE, 0xFAF, 0xFB0)
-                {
-                    X = 10,
-                    ButtonAction = ButtonAction.Activate
-                };
-                Add(pmButton);
-            }
-
+                X = 10,
+                ButtonAction = ButtonAction.Activate
+            };
+            Add(pmButton);
             //======================================================
             Button kickButton = new Button((int)Buttons.Kick, 0xFB1, 0xFB2, 0xFB3)
             {
@@ -441,27 +429,24 @@ namespace ClassicUO.Game.UI.Gumps
                     break;
 
                 case Buttons.GetBar:
-
-                    Engine.UI.GetGump<HealthBarGump>(member.Serial)?.Dispose();
-
-                    if (member.Serial == World.Player)
-                        StatusGumpBase.GetStatusGump()?.Dispose();
-
-                    Rectangle rect = FileManager.Gumps.GetTexture(0x0804).Bounds;
-                    Engine.UI.Add(new HealthBarGump(member.Serial) { X = Mouse.Position.X - (rect.Width >> 1), Y = Mouse.Position.Y - (rect.Height >> 1) });
-
-                    break;
-
-                case Buttons.GetCustomBar:
-
-
-                    Engine.UI.GetGump<HealthBarGumpCustom>(member.Serial)?.Dispose();
+                    UIManager.GetGump<BaseHealthBarGump>(member.Serial)?.Dispose();
 
                     if (member.Serial == World.Player)
                         StatusGumpBase.GetStatusGump()?.Dispose();
 
 
-                    Engine.UI.Add(new HealthBarGumpCustom(member.Serial) { X = World.Player.X, Y = World.Player.Y });
+
+                    if (ProfileManager.Current.CustomBarsToggled)
+                    {
+                        Rectangle rect = new Rectangle(0, 0, HealthBarGumpCustom.HPB_WIDTH, HealthBarGumpCustom.HPB_HEIGHT_SINGLELINE);
+                        UIManager.Add(new HealthBarGumpCustom(member.Serial) { X = Mouse.Position.X - (rect.Width >> 1), Y = Mouse.Position.Y - (rect.Height >> 1) });
+                    }
+                    else
+                    {
+                        Rectangle rect = FileManager.Gumps.GetTexture(0x0804).Bounds;
+                        UIManager.Add(new HealthBarGump(member.Serial) { X = Mouse.Position.X - (rect.Width >> 1), Y = Mouse.Position.Y - (rect.Height >> 1) });
+                    }
+
                     break;
             }
         }
@@ -469,8 +454,7 @@ namespace ClassicUO.Game.UI.Gumps
         private enum Buttons
         {
             Kick = 1,
-            GetBar,
-            GetCustomBar
+            GetBar
         }
     }
 }

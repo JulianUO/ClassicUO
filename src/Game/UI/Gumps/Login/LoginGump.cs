@@ -21,6 +21,7 @@
 
 #endregion
 
+using ClassicUO.Configuration;
 using ClassicUO.Game.Scenes;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.IO;
@@ -81,7 +82,9 @@ namespace ClassicUO.Game.UI.Gumps.Login
             });
             
 
-            Add(_checkboxAutologin = new Checkbox(0x05FF, 0x0601, "Autologin", 3, 0, false)
+            _checkboxSaveAccount.IsChecked = Settings.GlobalSettings.SaveAccount;
+            _checkboxAutologin.IsChecked = Settings.GlobalSettings.AutoLogin;
+			Add(_checkboxAutologin = new Checkbox(0x05FF, 0x0601, "Autologin", 3, 0, false)
             {
                 X = 200,
                 Y = 419
@@ -102,7 +105,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 Y = 453
             });
 
-            Add(new Label($"ClassicUO Version {Engine.Version}", false, 0x034E, font: 9)
+            Add(new Label($"ClassicUO Version {CUOEnviroment.Version}", false, 0x034E, font: 9)
             {
                 X = 232,
                 Y = 465
@@ -145,14 +148,14 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 IsPassword = true,
                 SafeCharactersOnly = true
             });
-            _textboxAccount.SetText(Engine.GlobalSettings.Username);
-            _textboxPassword.SetText(Crypter.Decrypt(Engine.GlobalSettings.Password));
+            _textboxAccount.SetText(Settings.GlobalSettings.Username);
+            _textboxPassword.SetText(Crypter.Decrypt(Settings.GlobalSettings.Password));
         }
 
         public override void OnKeyboardReturn(int textID, string text)
         {
             SaveCheckboxStatus();
-            LoginScene ls = Engine.SceneManager.GetScene<LoginScene>();
+            LoginScene ls = CUOEnviroment.Client.GetScene<LoginScene>();
 
             if (ls.CurrentLoginStep == LoginScene.LoginStep.Main)
                 ls.Connect(_textboxAccount.Text, _textboxPassword.Text);
@@ -160,8 +163,8 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
         private void SaveCheckboxStatus()
         {
-            Engine.GlobalSettings.SaveAccount = _checkboxSaveAccount.IsChecked;
-            Engine.GlobalSettings.AutoLogin = _checkboxAutologin.IsChecked;
+            Settings.GlobalSettings.SaveAccount = _checkboxSaveAccount.IsChecked;
+            Settings.GlobalSettings.AutoLogin = _checkboxAutologin.IsChecked;
         }
 
         public override void Update(double totalMS, double frameMS)
@@ -195,12 +198,12 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 case Buttons.NextArrow:
                     SaveCheckboxStatus();
                     if (!_textboxAccount.IsDisposed)
-                        Engine.SceneManager.GetScene<LoginScene>().Connect(_textboxAccount.Text, _textboxPassword.Text);
+                        CUOEnviroment.Client.GetScene<LoginScene>().Connect(_textboxAccount.Text, _textboxPassword.Text);
 
                     break;
 
                 case Buttons.Quit:
-                    Engine.Quit();
+                    CUOEnviroment.Client.Exit();
 
                     break;
             }

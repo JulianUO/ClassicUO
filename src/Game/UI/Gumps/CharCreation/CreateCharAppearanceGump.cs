@@ -27,6 +27,7 @@ using System.Linq;
 
 using ClassicUO.Game.Data;
 using ClassicUO.Game.GameObjects;
+using ClassicUO.Game.Managers;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Input;
 using ClassicUO.IO;
@@ -311,7 +312,7 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
 
         public override void OnButtonClick(int buttonID)
         {
-            var charCreationGump = Engine.UI.GetGump<CharCreationGump>();
+            var charCreationGump = UIManager.GetGump<CharCreationGump>();
 
             switch ((Buttons) buttonID)
             {
@@ -346,7 +347,7 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
         {
             if (string.IsNullOrEmpty(character.Name))
             {
-                Engine.UI.GetGump<CharCreationGump>()?.ShowMessage(FileManager.Cliloc.GetString(3000612));
+                UIManager.GetGump<CharCreationGump>()?.ShowMessage(FileManager.Cliloc.GetString(3000612));
 
                 return false;
             }
@@ -408,7 +409,7 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
 
         private class CustomColorPicker : Control
         {
-            private readonly ColorBox _box;
+            //private readonly ColorBox _box;
             private readonly int _cellH;
             private readonly int _cellW;
             private readonly ColorPickerBox _colorPicker;
@@ -495,7 +496,7 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
                     _colorPickerBox.MouseUp += ColorPickerBoxOnMouseUp;
                     _colorPickerBox.ColorSelectedIndex += ColorPickerBox_Selected;
 
-                    Engine.UI.Add(_colorPickerBox);
+                    UIManager.Add(_colorPickerBox);
                 }
             }
         }

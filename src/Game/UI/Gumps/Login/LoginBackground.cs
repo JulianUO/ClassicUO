@@ -51,7 +51,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
         public override void OnButtonClick(int buttonID)
         {
-            Engine.Quit();
+            CUOEnviroment.Client.Exit();
         }
     }
 }

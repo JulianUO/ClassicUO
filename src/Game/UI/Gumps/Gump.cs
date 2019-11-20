@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
+using ClassicUO.Game.Managers;
 using ClassicUO.Game.Scenes;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Renderer;
@@ -76,9 +77,9 @@ namespace ClassicUO.Game.UI.Gumps
 
         public void SetInScreen()
         {
-            if (X > 0 || Y > 0)
-                return;
-            if (Width < Engine.WindowWidth || Height < Engine.WindowHeight)
+            Rectangle rect = new Rectangle(0, 0, CUOEnviroment.Client.Window.ClientBounds.Width, CUOEnviroment.Client.Window.ClientBounds.Height);
+
+            if (rect.Intersects(Bounds))
                 return;
 
             X = 0;
@@ -101,11 +102,11 @@ namespace ClassicUO.Game.UI.Gumps
             if (Y < -halfHeight)
                 position.Y = -halfHeight;
 
-            if (X > Engine.Instance.Window.ClientBounds.Width - (Width - halfWidth))
-                position.X = Engine.Instance.Window.ClientBounds.Width - (Width - halfWidth);
+            if (X > CUOEnviroment.Client.Window.ClientBounds.Width - (Width - halfWidth))
+                position.X = CUOEnviroment.Client.Window.ClientBounds.Width - (Width - halfWidth);
 
-            if (Y > Engine.Instance.Window.ClientBounds.Height - (Height - halfHeight))
-                position.Y = Engine.Instance.Window.ClientBounds.Height - (Height - halfHeight);
+            if (Y > CUOEnviroment.Client.Window.ClientBounds.Height - (Height - halfHeight))
+                position.Y = CUOEnviroment.Client.Window.ClientBounds.Height - (Height - halfHeight);
             Location = position;
         }
 
@@ -139,7 +140,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 GameActions.ReplyGump(LocalSerial, ServerSerial, buttonID, switches.ToArray(), entries.ToArray());
 
-                Engine.UI.SavePosition(ServerSerial, Location);
+                UIManager.SavePosition(ServerSerial, Location);
                 Dispose();
             }
         }
@@ -159,116 +160,5 @@ namespace ClassicUO.Game.UI.Gumps
             // For a gump, Page is the page that is drawing.
             ActivePage = pageIndex;
         }
-    }
-
-    internal abstract class MinimizableGump : TextContainerGump
-    {
-        internal bool IsMinimized
-        {
-            get => Iconized != null && IconizerArea != null && _MinimizedSave.TryGetValue(LocalSerial, out bool minimized) && minimized;
-            private set
-            {
-                if (Iconized != null && IconizerArea != null && Iconized.IsVisible != value)
-                {
-                    _MinimizedSave[LocalSerial] = Iconized.IsVisible = value;
-                }
-            }
-        }
-
-        internal MinimizableGump(Serial local, Serial server) : base(local, server)
-        {
-        }
-
-        public override void Update(double totalMS, double frameMS)
-        {
-            base.Update(totalMS, frameMS);
-            if(!_IsUpdated)
-            {
-                _IsUpdated = true;
-                AfterCreationCall();
-            }
-        }
-
-        private void Iconized_MouseDoubleClick(object sender, Input.MouseDoubleClickEventArgs e)
-        {
-            if(e.Button == Input.MouseButton.Left)
-            {
-                IsMinimized = false;
-            }
-        }
-
-        private void IconizerButton_MouseUp(object sender, Input.MouseEventArgs e)
-        {
-            if(e.Button == Input.MouseButton.Left)
-            {
-                IsMinimized = true;
-            }
-        }
-
-        public override bool Draw(UltimaBatcher2D batcher, int x, int y)
-        {
-            if (IsMinimized && Iconized != null)
-                return Iconized.Draw(batcher, x + Iconized.X, y + Iconized.Y);
-            else
-                return base.Draw(batcher, x, y);
-        }
-
-        public override bool Contains(int x, int y)
-        {
-            return IsMinimized && Iconized != null ? Iconized.Contains(x, y) : base.Contains(x, y);
-        }
-
-        internal abstract GumpPic Iconized { get; }
-        internal abstract HitBox IconizerArea { get; }
-
-        public override void Save(BinaryWriter writer)
-        {
-            base.Save(writer);
-            writer.Write(LocalSerial);
-            writer.Write(IsMinimized);
-        }
-
-        public override void Restore(BinaryReader reader)
-        {
-            base.Restore(reader);
-            if(Configuration.Profile.GumpsVersion > 1)
-            {
-                _MinimizedSave[reader.ReadUInt32()] = reader.ReadBoolean();
-            }
-        }
-
-        //some gumps generate properties after it's main generation, this is here only to delay the generation of main properties AFTER the principal gump itself.
-        private void AfterCreationCall()
-        {
-            if (IconizerArea != null && Iconized != null)
-            {
-                Iconized.Initialize();
-                Iconized.IsVisible = false;
-                Iconized.AcceptMouseInput = true;
-                Iconized.CanMove = true;
-                Add(Iconized);
-
-                Add(IconizerArea);
-                IconizerArea.MouseUp += IconizerButton_MouseUp;
-                IconizerArea.Alpha = 0.95f;
-                Iconized.MouseDoubleClick += Iconized_MouseDoubleClick;
-                if (LocalSerial != Serial.INVALID)
-                {
-                    if (_MinimizedSave.TryGetValue(LocalSerial, out bool minimized))
-                        _MinimizedSave[LocalSerial] = IsMinimized = minimized;
-                    else
-                        _MinimizedSave[LocalSerial] = IsMinimized;
-                }
-            }
-        }
-
-        protected override void CloseWithRightClick()
-        {
-            _MinimizedSave.Remove(LocalSerial);
-            base.CloseWithRightClick();
-        }
-
-        private static readonly Dictionary<Serial, bool> _MinimizedSave = new Dictionary<Serial, bool>();
-        private bool _IsUpdated = false;
     }
 }
