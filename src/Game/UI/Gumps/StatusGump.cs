@@ -409,7 +409,7 @@ namespace ClassicUO.Game.UI.Gumps
             int xOffset = 0;
             _labels = new Label[(int)MobileStats.NumStats];
 
-            if (Engine.GlobalSettings.ShardType == 2)
+            if (Settings.GlobalSettings.ShardType == 2)
                 Add(new GumpPic(0, 0, 0x2A6E, 0));
             else
                 Add(new GumpPic(0, 0, 0x2A6C, 0));

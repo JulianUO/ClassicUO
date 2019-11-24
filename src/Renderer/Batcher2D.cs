@@ -1296,14 +1296,12 @@ namespace ClassicUO.Renderer
             vertex.Hue0 = vertex.Hue1 = vertex.Hue2 = vertex.Hue3 = hue;
 
 
-            //if (CheckInScreen(idx))
-            {
+            // if (CheckInScreen(idx))
+            // {
                 PushSprite(texture);
-
                 return true;
-            }
-
-            return false;
+            // }
+            // return false;
         }
 
         [MethodImpl(256)]

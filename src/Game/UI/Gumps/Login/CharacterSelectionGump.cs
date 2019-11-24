@@ -50,10 +50,8 @@ namespace ClassicUO.Game.UI.Gumps.Login
             int yBonus = 35;
             int listTitleY = 131;
 
-            if (!string.IsNullOrEmpty(lastSelected))
-                _selectedCharacter = (uint) Array.IndexOf(loginScene.Characters, lastSelected);
-            else if (loginScene.Characters.Length > 0)
-                _selectedCharacter = 0;
+            LoginScene loginScene = CUOEnviroment.Client.GetScene<LoginScene>();
+            var lastSelected = loginScene.Characters.FirstOrDefault(o => o == Settings.GlobalSettings.LastCharacterName);
 
             Add(new ResizePic(0x06DB)
             {

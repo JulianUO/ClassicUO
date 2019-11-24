@@ -80,11 +80,8 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 Width = 260,
                 Height = 40
             });
-            
 
-            _checkboxSaveAccount.IsChecked = Settings.GlobalSettings.SaveAccount;
-            _checkboxAutologin.IsChecked = Settings.GlobalSettings.AutoLogin;
-			Add(_checkboxAutologin = new Checkbox(0x05FF, 0x0601, "Autologin", 3, 0, false)
+            Add(_checkboxAutologin = new Checkbox(0x05FF, 0x0601, "Autologin", 3, 0, false)
             {
                 X = 200,
                 Y = 419
@@ -96,10 +93,10 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 Y = 419
             });
 
-            _checkboxSaveAccount.IsChecked = Engine.GlobalSettings.SaveAccount;
-            _checkboxAutologin.IsChecked = Engine.GlobalSettings.AutoLogin;
+            _checkboxSaveAccount.IsChecked = Settings.GlobalSettings.SaveAccount;
+            _checkboxAutologin.IsChecked = Settings.GlobalSettings.AutoLogin;
             
-            Add(new Label($"UO Version {Engine.GlobalSettings.ClientVersion}.", false, 0x034E, font: 9)
+            Add(new Label($"UO Version {Settings.GlobalSettings.ClientVersion}.", false, 0x034E, font: 9)
             {
                 X = 250,
                 Y = 453
