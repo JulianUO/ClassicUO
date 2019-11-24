@@ -311,6 +311,8 @@ namespace ClassicUO.Configuration
 
         [JsonProperty] public bool DoubleClickToLootInsideContainers { get; set; }
 
+        [JsonProperty] public bool RelativeDragAndDropItems { get; set; }
+
 
         internal static string ProfilePath { get; } = Path.Combine(CUOEnviroment.ExecutablePath, "Data", "Profiles");
         internal static string DataPath { get; } = Path.Combine(CUOEnviroment.ExecutablePath, "Data");
@@ -326,7 +328,7 @@ namespace ClassicUO.Configuration
             if (string.IsNullOrEmpty(CharacterName))
                 throw new InvalidDataException();
 
-            string path = FileSystemHelper.CreateFolderIfNotExists(ProfilePath, Username, ServerName, CharacterName);
+            string path = FileSystemHelper.CreateFolderIfNotExists(ProfilePath, Username.Trim(), ServerName.Trim(), CharacterName.Trim());
 
             Log.Trace( $"Saving path:\t\t{path}");
 
@@ -384,7 +386,7 @@ namespace ClassicUO.Configuration
         public static uint GumpsVersion { get; private set; }
         public List<Gump> ReadGumps()
         {
-            string path = FileSystemHelper.CreateFolderIfNotExists(ProfilePath, Username, ServerName, CharacterName);
+            string path = FileSystemHelper.CreateFolderIfNotExists(ProfilePath, Username.Trim(), ServerName.Trim(), CharacterName.Trim());
 
             string binpath = Path.Combine(path, "gumps.bin");
 

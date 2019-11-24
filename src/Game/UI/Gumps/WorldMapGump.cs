@@ -488,8 +488,22 @@ namespace ClassicUO.Game.UI.Gumps
                     {
                         var mob = World.Mobiles.Get(partyMember.Serial);
 
-                        if (mob != null)
-                            DrawMobile(batcher, mob, gX, gY, halfWidth, halfHeight, Zoom, Color.Yellow, true, true, true);
+                        if (mob != null && mob.Distance <= World.ClientViewRange)
+                        {
+                            var wme = World.WMapManager.GetEntity(mob);
+                            if (wme != null)
+                                wme.Name = partyMember.Name;
+
+                            DrawMobile(batcher, mob, gX, gY, halfWidth, halfHeight, Zoom, Color.Yellow, true, true, true);                  
+                        }
+                        else
+                        {
+                            var wme = World.WMapManager.GetEntity(partyMember.Serial);
+                            if (wme != null && !wme.IsGuild)
+                            {                             
+                                DrawWMEntity(batcher, wme, gX, gY, halfWidth, halfHeight, Zoom);
+                            }
+                        }
                     }
                 }
             }
@@ -497,22 +511,18 @@ namespace ClassicUO.Game.UI.Gumps
             foreach (var wme in World.WMapManager.Entities.Values)
             {
                 if (!wme.IsGuild)
+                {          
+                    continue;
+                }
+
+                if (string.IsNullOrEmpty(wme.Name))
                 {
-                    if (string.IsNullOrEmpty(wme.Name))
+                    Mobile m = World.Mobiles.Get(wme.Serial);
+
+                    if (m != null && !string.IsNullOrEmpty(m.Name))
                     {
-                        for (int i = 0; i < World.Party.Members.Length; i++)
-                        {
-                            if (World.Party.Members[i] != null && wme.Serial == World.Party.Members[i].Serial)
-                            {
-                                wme.Name = World.Party.Members[i].Name;
-
-                                break;
-                            }
-                        }
+                        wme.Name = m.Name;
                     }
-
-                    if (!_showPartyMembers)
-                        continue;
                 }
 
                 DrawWMEntity(batcher, wme, gX, gY, halfWidth, halfHeight, Zoom);
@@ -656,8 +666,9 @@ namespace ClassicUO.Game.UI.Gumps
 
             batcher.Draw2D(Textures.GetTexture(color), rotX - DOT_SIZE_HALF, rotY - DOT_SIZE_HALF, DOT_SIZE, DOT_SIZE, ref _hueVector);
 
-            string name = entity.GetName();
-            Vector2 size = Fonts.Regular.MeasureString(name);
+            //string name = entity.GetName();
+            string name = entity.Name ?? "<out of range>";
+            Vector2 size = Fonts.Regular.MeasureString(entity.Name ?? name);
 
             if (rotX + size.X / 2 > x + Width - 8)
             {

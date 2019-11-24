@@ -306,7 +306,6 @@ namespace ClassicUO.Game.Scenes
                 return;
 
             _dragginObject = SelectedObject.Object as GameObject;
-            _dragOffset = Mouse.LDropPosition;
 
             if (ProfileManager.Current.EnableDragSelect && DragSelectModifierActive())
             {
@@ -420,33 +419,63 @@ namespace ClassicUO.Game.Scenes
                     case CursorTarget.Object:
                     case CursorTarget.MultiPlacement:
 
-                        if (SelectedObject.Object is GameObject obj)
+                        if (World.CustomHouseManager != null)
                         {
-                            if (World.CustomHouseManager != null)
-                            {
-                                World.CustomHouseManager.OnTargetWorld(obj);
-                            }
-                            else
-                            {
-                                TargetManager.TargetGameObject(obj);
-                            }
+                            World.CustomHouseManager.OnTargetWorld(SelectedObject.Object as GameObject);
+                        }
+                        else
+                        {
+                            var obj = SelectedObject.Object;
+                            if (obj is TextOverhead ov)
+                                obj = ov.Owner;
+                            else if (obj is GameEffect eff && eff.Source != null)
+                                obj = eff.Source;
 
-                            Mouse.LastLeftButtonClickTime = 0;
+                            switch (obj)
+                            {
+                                case Entity ent:
+                                    TargetManager.Target(ent.Serial);
+                                    break;
+                                case Land land:
+                                    TargetManager.Target(land.X, land.Y, land.Z);
+                                    break;
+                                case GameObject o:
+                                    TargetManager.Target(o.Graphic, o.X, o.Y, o.Z);
+                                    break;
+                            }
                         }
 
-
+                        Mouse.LastLeftButtonClickTime = 0;
                         break;
 
                     case CursorTarget.SetTargetClientSide:
+                    {
+                        var obj = SelectedObject.Object;
+                        if (obj is TextOverhead ov)
+                            obj = ov.Owner;
+                        else if (obj is GameEffect eff && eff.Source != null)
+                            obj = eff.Source;
 
-                        if (SelectedObject.Object is GameObject obj2)
+                        switch (obj)
                         {
-                            TargetManager.TargetGameObject(obj2);
-                            Mouse.LastLeftButtonClickTime = 0;
-                            UIManager.Add(new InfoGump(obj2));
+                            case Entity ent:
+                                TargetManager.Target(ent.Serial);
+                                UIManager.Add(new InfoGump(ent));
+                                break;
+                            case Land land:
+                                TargetManager.Target(land.X, land.Y, land.Z);
+                                UIManager.Add(new InfoGump(land));
+                                break;
+                            case GameObject o:
+                                TargetManager.Target(o.Graphic, o.X, o.Y, o.Z);
+                                UIManager.Add(new InfoGump(o));
+                                break;
                         }
 
-                        break;
+                        Mouse.LastLeftButtonClickTime = 0;
+                    }
+
+                    break;
 
                     case CursorTarget.HueCommandTarget:
 
@@ -525,9 +554,14 @@ namespace ClassicUO.Game.Scenes
             bool result = false;
 
             if (!IsMouseOverViewport)
+            {
+                result = _queuedObject != null;
+                ClearDequeued();
                 return result;
+            }
 
             BaseGameObject obj = SelectedObject.Object;
+
 
             switch (obj)
             {
@@ -667,16 +701,9 @@ namespace ClassicUO.Game.Scenes
             {
                 Point offset = Mouse.LDroppedOffset;
 
-                //if (World.CustomHouseManager != null && World.CustomHouseManager.SelectedGraphic != 0)
-                //{
-                //    World.CustomHouseManager.OnTargetWorld(SelectedObject.Object as GameObject);
-                //    return;
-                //}
-
                 if (Math.Abs(offset.X) > Constants.MIN_PICKUP_DRAG_DISTANCE_PIXELS || Math.Abs(offset.Y) > Constants.MIN_PICKUP_DRAG_DISTANCE_PIXELS)
                 {
                     GameObject obj = ProfileManager.Current.SallosEasyGrab && SelectedObject.LastObject is GameObject o ? o : _dragginObject;
-
 
                     switch (obj)
                     {
@@ -712,12 +739,12 @@ namespace ClassicUO.Game.Scenes
 
                             break;
 
-                        case Item item /*when !item.IsCorpse*/:
+                        case Item item:
 
                             if (item.IsDamageable)
                                 goto mobile;
 
-                            PickupItemBegin(item, item.Bounds.Width >> 1, item.Bounds.Height >> 1);
+                            PickupItemBegin(item, Mouse.Position.X, Mouse.Position.Y);
 
                             break;
                     }

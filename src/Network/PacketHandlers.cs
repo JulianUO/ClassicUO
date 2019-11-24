@@ -232,7 +232,7 @@ namespace ClassicUO.Network
 
             if (World.Party.PartyHealTimer < Time.Ticks && World.Party.PartyHealTarget != 0)
             {
-                TargetManager.TargetGameObject(World.Get(World.Party.PartyHealTarget));
+                TargetManager.Target(World.Party.PartyHealTarget);
                 World.Party.PartyHealTimer = 0;
                 World.Party.PartyHealTarget = 0;
             }
@@ -615,7 +615,7 @@ namespace ClassicUO.Network
 
         private static void EnterWorld(Packet p)
         {
-            ProfileManager.Load(World.ServerName, LoginScene.Account, Settings.GlobalSettings.LastCharacterName);
+            ProfileManager.Load(World.ServerName, LoginScene.Account, Settings.GlobalSettings.LastCharacterName.Trim());
 
             World.Mobiles.Add(World.Player = new PlayerMobile(p.ReadUInt()));
             p.Skip(4);

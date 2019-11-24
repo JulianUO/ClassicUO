@@ -41,14 +41,14 @@ namespace ClassicUO.Game
 {
     internal static class GameActions
     {
-        private static Func<Item, int, int, int?, bool> _pickUpAction;
+        private static Func<Item, int, int, int?, Point?, bool> _pickUpAction;
 
         public static int LastSpellIndex { get; set; } = 1;
         public static int LastSkillIndex { get; set; } = 1;
 
         public static Serial LastObject { get; set; } = Serial.INVALID;
 
-        internal static void Initialize(Func<Item, int, int, int?, bool> onPickUpAction)
+        internal static void Initialize(Func<Item, int, int, int?, Point?, bool> onPickUpAction)
         {
             _pickUpAction = onPickUpAction;
         }
@@ -201,14 +201,14 @@ namespace ClassicUO.Game
             PickUp(item, point.X, point.Y, amount);
         }
 
-        public static void PickUp(Serial item, int x, int y, int? amount = null)
+        public static void PickUp(Serial item, int x, int y, int? amount = null, Point? offset = null)
         {
-            _pickUpAction(World.Items.Get(item), x, y, amount);
+            _pickUpAction(World.Items.Get(item), x, y, amount, offset);
         }
 
-        public static void PickUp(Serial item, int? amount = null)
+        public static void PickUp(Serial item, int? amount = null, Point? offset = null)
         {
-            _pickUpAction(World.Items.Get(item), 0, 0, amount);
+            _pickUpAction(World.Items.Get(item), 0, 0, amount, offset);
         }
 
         public static void DropItem(Serial serial, int x, int y, int z, Serial container)
@@ -402,9 +402,9 @@ namespace ClassicUO.Game
             Socket.Send(new PClickQuestArrow(rightClick));
         }
 
-        public static void GrabItem(Item item, ushort amount, Serial bag = default(Serial))
+        public static void GrabItem(Serial serial, ushort amount, Serial bag = default(Serial))
         {
-            Socket.Send(new PPickUpRequest(item, amount));
+            Socket.Send(new PPickUpRequest(serial, amount));
 
             if(bag == default(Serial))
                 bag = ProfileManager.Current.GrabBagSerial == 0
@@ -417,7 +417,7 @@ namespace ClassicUO.Game
                 ProfileManager.Current.GrabBagSerial = 0;
                 bag = World.Player.Equipment[(int) Layer.Backpack].Serial;
             }
-            DropItem(item.Serial, Position.INVALID, bag);
+            DropItem(serial, Position.INVALID, bag);
         }
     }
 }

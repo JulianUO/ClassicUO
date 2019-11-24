@@ -135,7 +135,7 @@ namespace ClassicUO.Game.UI.Gumps
 
             if (TargetManager.IsTargeting)
             {
-                TargetManager.TargetGameObject(World.Get(LocalSerial));
+                TargetManager.Target(LocalSerial);
                 Mouse.LastLeftButtonClickTime = 0;
             }
             else if (_canChangeName && !_targetBroke)
@@ -171,7 +171,7 @@ namespace ClassicUO.Game.UI.Gumps
             if (TargetManager.IsTargeting)
             {
                 _targetBroke = true;
-                TargetManager.TargetGameObject(World.Get(LocalSerial));
+                TargetManager.Target(LocalSerial);
                 Mouse.LastLeftButtonClickTime = 0;
             }
             else if (_canChangeName)
@@ -179,6 +179,8 @@ namespace ClassicUO.Game.UI.Gumps
                 _textBox.IsEditable = false;
                 UIManager.SystemChat.SetFocus();
             }
+
+            base.OnMouseDown(x, y, button);
         }
 
         protected override bool OnMouseDoubleClick(int x, int y, MouseButton button)
