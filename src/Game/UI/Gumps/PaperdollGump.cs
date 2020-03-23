@@ -69,12 +69,11 @@ namespace ClassicUO.Game.UI.Gumps
             CanCloseWithRightClick = true;
         }
 
-        public PaperDollGump(uint serial, bool canLift) : this()
+        public PaperDollGump(uint serial) : this()
         {
             LocalSerial = serial;
-            CanLift = canLift;
-
             Mobile mobile = World.Mobiles.Get(serial);
+
             if (mobile != null)
             {
                 Mobile = mobile;
@@ -95,7 +94,7 @@ namespace ClassicUO.Game.UI.Gumps
                 {
                     _isMinimized = value;
 
-                    _picBase.Graphic = value ? (ushort) 0x7EE : (ushort) (0x07d0 + (Mobile == World.Player ? 0 : 1)) ;
+                    _picBase.Graphic = value ? (ushort)0x7EE : (ushort)(0x07d0 + (Mobile == World.Player ? 0 : 1));
 
                     foreach (var c in Children)
                     {
@@ -451,7 +450,7 @@ namespace ClassicUO.Game.UI.Gumps
 
                 Dispose();
             }
-            else 
+            else
                 Dispose();
         }
 
