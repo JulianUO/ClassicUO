@@ -1,33 +1,30 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-
 using ClassicUO.Game.Managers;
-using ClassicUO.IO;
 using ClassicUO.IO.Resources;
+using ClassicUO.Utility.Logging;
 
 using Microsoft.Xna.Framework;
 
@@ -38,7 +35,7 @@ namespace ClassicUO.Game.GameObjects
         private static readonly Queue<Land> _pool = new Queue<Land>();
         static Land()
         {
-            for (int i = 0; i < 1000; i++)
+            for (int i = 0; i < Constants.PREDICTABLE_TILE_COUNT; i++)
                 _pool.Enqueue(new Land());
         }
 
@@ -47,9 +44,11 @@ namespace ClassicUO.Game.GameObjects
 
         }
 
-        public Land(Graphic graphic)
+        public ushort OriginalGraphic;
+
+        private Land(ushort graphic)
         {
-            Graphic = graphic;
+            OriginalGraphic = Graphic = graphic;
             IsStretched = TileData.TexID == 0 && TileData.IsWet;
 
             AllowedToDraw = Graphic > 2;
@@ -57,12 +56,13 @@ namespace ClassicUO.Game.GameObjects
             AlphaHue = 255;
         }
 
-        public static Land Create(Graphic graphic)
+        public static Land Create(ushort graphic)
         {
             if (_pool.Count != 0)
             {
                 var l = _pool.Dequeue();
                 l.Graphic = graphic;
+                l.OriginalGraphic = graphic;
                 l.IsDestroyed = false;
                 l.AlphaHue = 255;
                 l.IsStretched = l.TileData.TexID == 0 && l.TileData.IsWet;
@@ -74,6 +74,9 @@ namespace ClassicUO.Game.GameObjects
                 l.Bounds = Rectangle.Empty;
                 return l;
             }
+
+            Log.Debug(string.Intern("Created new Land"));
+
             return new Land(graphic);
         }
 
@@ -89,11 +92,18 @@ namespace ClassicUO.Game.GameObjects
         public Vector3[] Normals;
 
         public Rectangle Rectangle;
-        public ref readonly LandTiles TileData => ref FileManager.TileData.LandData[Graphic];
+        public ref readonly LandTiles TileData => ref TileDataLoader.Instance.LandData[Graphic];
 
         public sbyte MinZ;
         public sbyte AverageZ;
         public bool IsStretched;
+
+
+        public override void UpdateGraphicBySeason()
+        {
+            Graphic = SeasonManager.GetLandSeasonGraphic(World.Season, OriginalGraphic);
+            AllowedToDraw = Graphic > 2;
+        }
 
         public void UpdateZ(int zTop, int zRight, int zBottom, sbyte currentZ)
         {

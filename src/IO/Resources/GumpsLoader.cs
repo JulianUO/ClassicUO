@@ -1,24 +1,22 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using System;
@@ -35,33 +33,51 @@ namespace ClassicUO.IO.Resources
     {
         private UOFile _file;
 
+        private GumpsLoader()
+        {
+
+        }
+
+        private static GumpsLoader _instance;
+        public static GumpsLoader Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    _instance = new GumpsLoader();
+                }
+
+                return _instance;
+            }
+        }
+
         public override Task Load()
         {
             return Task.Run(() => {
 
-                string path = Path.Combine(FileManager.UoFolderPath, "gumpartLegacyMUL.uop");
+                string path = UOFileManager.GetUOFilePath("gumpartLegacyMUL.uop");
 
                 if (File.Exists(path))
                 {
                     _file = new UOFileUop(path, "build/gumpartlegacymul/{0:D8}.tga", true);
                     Entries = new UOFileIndex[Constants.MAX_GUMP_DATA_INDEX_COUNT];
-                    FileManager.UseUOPGumps = true;
+                    Client.UseUOPGumps = true;
                 }
                 else
                 {
-                    path = Path.Combine(FileManager.UoFolderPath, "Gumpart.mul");
-                    string pathidx = Path.Combine(FileManager.UoFolderPath, "Gumpidx.mul");
+                    path = UOFileManager.GetUOFilePath("Gumpart.mul");
+                    string pathidx = UOFileManager.GetUOFilePath("Gumpidx.mul");
 
                     if (File.Exists(path) && File.Exists(pathidx))
                     {
                         _file = new UOFileMul(path, pathidx, Constants.MAX_GUMP_DATA_INDEX_COUNT, 12);
                     }
-                    FileManager.UseUOPGumps = false;
+                    Client.UseUOPGumps = false;
                 }
-
                 _file.FillEntries(ref Entries);
 
-                string pathdef = Path.Combine(FileManager.UoFolderPath, "gump.def");
+                string pathdef = UOFileManager.GetUOFilePath("gump.def");
 
                 if (!File.Exists(pathdef))
                     return;
@@ -136,9 +152,12 @@ namespace ClassicUO.IO.Resources
             if (width == 0 || height == 0)
                 return null;
 
+            _file.SetData(entry.Address, entry.FileSize);
+
             _file.Seek(entry.Offset);
-            //width = PaddedRowWidth(16, width, 4) >> 1;
+
             IntPtr dataStart = _file.PositionAddress;
+
             ushort[] pixels = new ushort[width * height];
             int* lookuplist = (int*) dataStart;
 
@@ -159,28 +178,6 @@ namespace ClassicUO.IO.Resources
                     ushort hue = (ushort) ((val != 0 ? 0x8000 : 0) | val);
 
                     int count = gmul[i].Run;
-
-                    //byte a = (byte)(((val & 0x8000) >> 0) << 0);
-                    //byte r = (byte)(((val & 0x7C00) >> 0) << 0);
-                    //byte g = (byte)(((val & 0x3E0) >> 0) << 0);
-                    //byte b = (byte)(((val & 0x1F) >> 0) << 0);
-
-                    //byte r = (byte) (( (val >> 10) ) );
-                    //byte g = (byte) (( (val >> 5)  ) );
-                    //byte b = (byte) (( (val >> 0)  ) );
-                    //byte a = (byte) (( (val >> 15) ) );
-
-
-                    //if (b == 8)
-                    //{
-                    //    hue = (ushort)((
-                    //                       (a << 15) |
-                    //                       (r << 10) |
-                    //                       (g << 5)  |
-                    //                       b)
-                    //                   );
-                    //    hue |= 0x8000;
-                    //}
 
                     for (int j = 0; j < count; j++)
                         pixels[pos++] = hue == 0 && count == 1 ? (ushort)1 : hue;//avoid single zero pixels

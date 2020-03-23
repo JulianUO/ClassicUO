@@ -1,32 +1,28 @@
 #region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
-using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 
 using ClassicUO.IO.Resources;
-
+using ClassicUO.Utility.Collections;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -98,7 +94,7 @@ namespace ClassicUO.Renderer
 
     internal abstract class UOTexture : Texture2D
     {
-        protected UOTexture(int width, int height, SurfaceFormat format) : base(CUOEnviroment.Client.GraphicsDevice, width, height, false, format)
+        protected UOTexture(int width, int height, SurfaceFormat format) : base(Client.Game.GraphicsDevice, width, height, false, format)
         {
             Ticks = Time.Ticks + 3000;
         }
@@ -109,7 +105,7 @@ namespace ClassicUO.Renderer
 
     internal class FontTexture : UOTexture32
     {
-        public FontTexture(int width, int height, int linescount, List<WebLinkRect> links) : base(width, height)
+        public FontTexture(int width, int height, int linescount, RawList<WebLinkRect> links) : base(width, height)
         {
             LinesCount = linescount;
             Links = links;
@@ -117,7 +113,7 @@ namespace ClassicUO.Renderer
 
         public int LinesCount { get; set; }
 
-        public List<WebLinkRect> Links { get; }
+        public RawList<WebLinkRect> Links { get; }
     }
 
     internal class AnimationFrameTexture : UOTexture16

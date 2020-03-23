@@ -1,29 +1,26 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using System;
-
-using ClassicUO.IO;
+using ClassicUO.IO.Resources;
 using ClassicUO.Renderer;
 
 namespace ClassicUO.Game.UI
@@ -57,22 +54,28 @@ namespace ClassicUO.Game.UI
 
             string text = Text.Insert(CaretIndex, c);
             int count = c.Length;
-
+            int countd = 0;
+            bool pd = false;
             if (MaxLines > 0)
             {
-                var newlines = GetLinesCharsCount(text);
-
+                int[] newlines = GetLinesCharsCount(text);
                 if (newlines.Length > MaxLines)
                 {
-                    count = 0;
-
+                    pd = true;
+                    countd = 0;
                     for (int l = newlines.Length - 1; l >= MaxLines; --l)
-                        count += newlines[l];
+                    {
+                        countd += newlines[l];
+                    }
                     c = text;
+                    if (CaretIndex + count < text.Length)
+                    {
+                        pd = false;
+                    }
 
-                    text = text.Remove(Math.Min(Math.Max(0, text.Length - 1), text.Length - count));
+                    text = text.Remove(Math.Min(Math.Max(0, text.Length - 1), text.Length - countd));
                     c = c.Length > text.Length ? c.Substring(text.Length) : null;
-                    if (c != null) count -= c.Length;
+                    if (c != null) countd -= c.Length;
                 }
                 else
                     c = null;
@@ -80,10 +83,13 @@ namespace ClassicUO.Game.UI
             else
                 c = null;
 
-            count = CaretIndex += count;
-            SetText(text, count);
+            count = CaretIndex += (pd ? countd : count);
 
-            return c;
+            SetText(text, count);
+            if (!pd)
+                return null;
+            else
+                return c;
         }
 
         public void SetText(string text, int newcaretpos)
@@ -96,22 +102,19 @@ namespace ClassicUO.Game.UI
 
             if (MaxWidth > 0)
             {
-                int width = RenderText.IsUnicode ? FileManager.Fonts.GetWidthUnicode(RenderText.Font, text) : FileManager.Fonts.GetWidthASCII(RenderText.Font, text);
+                int width = RenderText.IsUnicode ? FontsLoader.Instance.GetWidthUnicode(RenderText.Font, text) : FontsLoader.Instance.GetWidthASCII(RenderText.Font, text);
                 int len = text.Length;
 
                 while (MaxWidth < width && len > 0)
                 {
                     if (CaretIndex > 0)
                     {
-                        if (CaretIndex < 1)
-                            return;
-
                         CaretIndex--;
                     }
 
                     text = CaretIndex < text.Length ? text.Remove(CaretIndex, 1) : text.Remove(text.Length - 1);
                     len--;
-                    width = RenderText.IsUnicode ? FileManager.Fonts.GetWidthUnicode(RenderText.Font, text) : FileManager.Fonts.GetWidthASCII(RenderText.Font, text);
+                    width = RenderText.IsUnicode ? FontsLoader.Instance.GetWidthUnicode(RenderText.Font, text) : FontsLoader.Instance.GetWidthASCII(RenderText.Font, text);
                 }
             }
 
@@ -121,12 +124,12 @@ namespace ClassicUO.Game.UI
 
         public int[] GetLinesCharsCount()
         {
-            return RenderText.IsUnicode ? FileManager.Fonts.GetLinesCharsCountUnicode(RenderText.Font, RenderText.Text, RenderText.Align, (ushort) RenderText.FontStyle, Width, true) : FileManager.Fonts.GetLinesCharsCountASCII(RenderText.Font, RenderText.Text, RenderText.Align, (ushort) RenderText.FontStyle, Width, true);
+            return RenderText.IsUnicode ? FontsLoader.Instance.GetLinesCharsCountUnicode(RenderText.Font, RenderText.Text, RenderText.Align, (ushort) RenderText.FontStyle, Width, true) : FontsLoader.Instance.GetLinesCharsCountASCII(RenderText.Font, RenderText.Text, RenderText.Align, (ushort) RenderText.FontStyle, Width, true);
         }
 
         public int[] GetLinesCharsCount(string text)
         {
-            return RenderText.IsUnicode ? FileManager.Fonts.GetLinesCharsCountUnicode(RenderText.Font, text, RenderText.Align, (ushort) RenderText.FontStyle, Width, true, true) : FileManager.Fonts.GetLinesCharsCountASCII(RenderText.Font, text, RenderText.Align, (ushort) RenderText.FontStyle, Width, true, true);
+            return RenderText.IsUnicode ? FontsLoader.Instance.GetLinesCharsCountUnicode(RenderText.Font, text, RenderText.Align, (ushort) RenderText.FontStyle, Width, true, true) : FontsLoader.Instance.GetLinesCharsCountASCII(RenderText.Font, text, RenderText.Align, (ushort) RenderText.FontStyle, Width, true, true);
         }
     }
 }

@@ -1,24 +1,22 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using System.Collections.Generic;
@@ -35,11 +33,31 @@ namespace ClassicUO.IO.Resources
         private readonly Dictionary<int, string> _entries = new Dictionary<int, string>();
         private string _cliloc;
 
+        private ClilocLoader()
+        {
+
+        }
+
+        private static ClilocLoader _instance;
+        public static ClilocLoader Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    _instance = new ClilocLoader();
+                }
+
+                return _instance;
+            }
+        }
+
+
         public Task Load(string cliloc)
         {
             _cliloc = cliloc;
 
-            if (!File.Exists(Path.Combine(FileManager.UoFolderPath, cliloc)))
+            if (!File.Exists(UOFileManager.GetUOFilePath(cliloc)))
                 _cliloc = "Cliloc.enu";
 
             return Load();
@@ -51,7 +69,7 @@ namespace ClassicUO.IO.Resources
                 if (string.IsNullOrEmpty(_cliloc))
                     _cliloc = "Cliloc.enu";
 
-                string path = Path.Combine(FileManager.UoFolderPath, _cliloc);
+                string path = UOFileManager.GetUOFilePath(_cliloc);
 
                 if (!File.Exists(path))
                     return;
@@ -123,7 +141,8 @@ namespace ClassicUO.IO.Resources
                 }
             }
 
-            for (int i = 0; i < arguments.Count; i++)
+            int index = 0;
+            while (true)
             {
                 int pos = baseCliloc.IndexOf('~');
 
@@ -135,18 +154,44 @@ namespace ClassicUO.IO.Resources
                 if (pos2 == -1)
                     break;
 
-                string a = arguments[i];
+                string a = index >= arguments.Count ? string.Empty : arguments[index];
 
                 if (a.Length > 1 && a[0] == '#')
                 {
                     if (int.TryParse(a.Substring(1), out int id1))
-                        arguments[i] = GetString(id1) ?? string.Empty;
+                        arguments[index] = GetString(id1) ?? string.Empty;
                     else
-                        arguments[i] = a;
+                        arguments[index] = a;
                 }
 
-                baseCliloc = baseCliloc.Remove(pos, pos2 - pos + 1).Insert(pos, arguments[i]);
+                baseCliloc = baseCliloc.Remove(pos, pos2 - pos + 1).Insert(pos, index >= arguments.Count ? string.Empty : arguments[index]);
+                index++;
             }
+
+            //for (int i = 0; i < arguments.Count; i++)
+            //{
+            //    int pos = baseCliloc.IndexOf('~');
+
+            //    if (pos == -1)
+            //        break;
+
+            //    int pos2 = baseCliloc.IndexOf('~', pos + 1);
+
+            //    if (pos2 == -1)
+            //        break;
+
+            //    string a = arguments[i];
+
+            //    if (a.Length > 1 && a[0] == '#')
+            //    {
+            //        if (int.TryParse(a.Substring(1), out int id1))
+            //            arguments[i] = GetString(id1) ?? string.Empty;
+            //        else
+            //            arguments[i] = a;
+            //    }
+
+            //    baseCliloc = baseCliloc.Remove(pos, pos2 - pos + 1).Insert(pos, arguments[i]);
+            //}
 
             if (capitalize)
                 baseCliloc = StringHelper.CapitalizeAllWords(baseCliloc);

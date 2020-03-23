@@ -44,16 +44,20 @@ namespace ClassicUO.Game.UI.Gumps.Login
         {
             //AddChildren(new LoginBackground(true));
 
-            Add(new Button((int) Buttons.Prev, 0x0605, 0x0606)
+            Add(new Button((int)Buttons.Prev, 0x0605, 0x0606)
             {
-                X = 575, Y = 445, ButtonAction = ButtonAction.Activate
+                X = 575,
+                Y = 445,
+                ButtonAction = ButtonAction.Activate
             });
 
-            Add(new Button((int) Buttons.Next, 0x603, 0x0604)
+            Add(new Button((int)Buttons.Next, 0x603, 0x0604)
             {
-                X = 602, Y = 445, ButtonAction = ButtonAction.Activate
+                X = 602,
+                Y = 445,
+                ButtonAction = ButtonAction.Activate
             });
-            
+
             Add(new ResizePic(0x06DB)
             {
                 X = 150,
@@ -65,22 +69,25 @@ namespace ClassicUO.Game.UI.Gumps.Login
             // Server Scroll Area Bg
             Add(new ResizePic(0x0DAC)
             {
-                X = 170, Y = 110, Width = 393 - 14 - 40, Height = 300 - 40
+                X = 170,
+                Y = 110,
+                Width = 393 - 14 - 40,
+                Height = 300 - 40
             });
             // Sever Scroll Area
             ScrollArea scrollArea = new ScrollArea(150, 130, 383, 271, true);
-            LoginScene loginScene = CUOEnviroment.Client.GetScene<LoginScene>();
+            LoginScene loginScene = Client.Game.GetScene<LoginScene>();
 
             foreach (ServerListEntry server in loginScene.Servers)
             {
                 HoveredLabel label;
-                scrollArea.Add(label = new HoveredLabel($"{server.Name}                         -           -", false, NORMAL_COLOR, SELECTED_COLOR, font: 3)
+                scrollArea.Add(label = new HoveredLabel($"{server.Name}                         -           -", false, NORMAL_COLOR, SELECTED_COLOR, NORMAL_COLOR, font: 3)
                 {
-                    X = 50,
+                     X = 50,
                     //Y = 250
                 });
 
-                label.MouseUp += (sender, e) => { OnButtonClick((int) (Buttons.Server + server.Index)); };
+                label.MouseUp += (sender, e) => { OnButtonClick((int)(Buttons.Server + server.Index)); };
             }
 
             Add(scrollArea);
@@ -90,16 +97,16 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
         public override void OnButtonClick(int buttonID)
         {
-            LoginScene loginScene = CUOEnviroment.Client.GetScene<LoginScene>();
+            LoginScene loginScene = Client.Game.GetScene<LoginScene>();
 
-            if (buttonID >= (int) Buttons.Server)
+            if (buttonID >= (int)Buttons.Server)
             {
-                int index = buttonID - (int) Buttons.Server;
-                loginScene.SelectServer((byte) index);
+                int index = buttonID - (int)Buttons.Server;
+                loginScene.SelectServer((byte)index);
             }
             else
             {
-                switch ((Buttons) buttonID)
+                switch ((Buttons)buttonID)
                 {
                     case Buttons.Next:
                     case Buttons.Earth:
@@ -110,12 +117,12 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
                             if (index <= 0 || index > loginScene.Servers.Length)
                             {
-                                Log.Warn( $"Wrong server index: {index}");
+                                Log.Warn($"Wrong server index: {index}");
 
                                 index = 1;
                             }
 
-                            loginScene.SelectServer((byte) loginScene.Servers[index - 1].Index);
+                            loginScene.SelectServer((byte)loginScene.Servers[index - 1].Index);
                         }
 
                         break;
@@ -132,7 +139,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
         {
             if (key == SDL.SDL_Keycode.SDLK_RETURN || key == SDL.SDL_Keycode.SDLK_KP_ENTER)
             {
-                LoginScene loginScene = CUOEnviroment.Client.GetScene<LoginScene>();
+                LoginScene loginScene = Client.Game.GetScene<LoginScene>();
 
                 if (loginScene.Servers.Any())
                 {
@@ -140,12 +147,12 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
                     if (index <= 0 || index > loginScene.Servers.Length)
                     {
-                        Log.Warn( $"Wrong server index: {index}");
+                        Log.Warn($"Wrong server index: {index}");
 
                         index = 1;
                     }
 
-                    loginScene.SelectServer((byte) loginScene.Servers[index - 1].Index);
+                    loginScene.SelectServer((byte)loginScene.Servers[index - 1].Index);
                 }
             }
         }
@@ -171,7 +178,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
             {
                 _buttonId = entry.Index;
 
-                Add(_serverName = new HoveredLabel($"{entry.Name}     -      -" , false, NORMAL_COLOR, SELECTED_COLOR, font: 5));
+                Add(_serverName = new HoveredLabel($"{entry.Name}     -      -", false, NORMAL_COLOR, SELECTED_COLOR, NORMAL_COLOR, font: 5));
                 _serverName.X = 50;
                 _serverName.Y = 310;
 
@@ -196,9 +203,9 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 base.OnMouseExit(x, y);
             }
 
-            protected override void OnMouseUp(int x, int y, MouseButton button)
+            protected override void OnMouseUp(int x, int y, MouseButtonType button)
             {
-                if (button == MouseButton.Left) OnButtonClick((int)Buttons.Server + _buttonId);
+                if (button == MouseButtonType.Left) OnButtonClick((int)Buttons.Server + _buttonId);
             }
         }
     }

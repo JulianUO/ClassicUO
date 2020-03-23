@@ -1,30 +1,28 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using ClassicUO.Configuration;
+using ClassicUO.Data;
 using ClassicUO.Game.Scenes;
 using ClassicUO.Game.UI.Controls;
-using ClassicUO.IO;
 using ClassicUO.Renderer;
 using ClassicUO.Utility;
 
@@ -32,6 +30,8 @@ namespace ClassicUO.Game.UI.Gumps.Login
 {
     internal class LoginGump : Gump
     {
+        private readonly ushort _buttonNormal;
+        private readonly ushort _buttonOver;
         private readonly Checkbox _checkboxAutologin;
         private readonly Checkbox _checkboxSaveAccount;
         private readonly Button _nextArrow0;
@@ -43,11 +43,10 @@ namespace ClassicUO.Game.UI.Gumps.Login
             CanCloseWithRightClick = false;
 
             AcceptKeyboardInput = false;
-
             Add(new GumpPic(0, 0, 0x14E, 0));
 
             // Arrow Button
-            Add(_nextArrow0 = new Button((int) Buttons.NextArrow, 0x0603, 0x604)
+            Add(_nextArrow0 = new Button((int)Buttons.NextArrow, 0x0603, 0x604)
             {
                 X = 602,
                 Y = 445,
@@ -95,7 +94,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
             _checkboxSaveAccount.IsChecked = Settings.GlobalSettings.SaveAccount;
             _checkboxAutologin.IsChecked = Settings.GlobalSettings.AutoLogin;
-            
+
             Add(new Label($"UO Version {Settings.GlobalSettings.ClientVersion}.", false, 0x034E, font: 9)
             {
                 X = 250,
@@ -111,7 +110,6 @@ namespace ClassicUO.Game.UI.Gumps.Login
             /*
             int htmlX = 130;
             int htmlY = 442;
-
             Add(new HtmlControl(htmlX, htmlY, 300, 100,
                                 false, false,
                                 false, 
@@ -149,12 +147,15 @@ namespace ClassicUO.Game.UI.Gumps.Login
             _textboxPassword.SetText(Crypter.Decrypt(Settings.GlobalSettings.Password));
         }
 
+
+
+
         public override void OnKeyboardReturn(int textID, string text)
         {
             SaveCheckboxStatus();
-            LoginScene ls = CUOEnviroment.Client.GetScene<LoginScene>();
+            LoginScene ls = Client.Game.GetScene<LoginScene>();
 
-            if (ls.CurrentLoginStep == LoginScene.LoginStep.Main)
+            if (ls.CurrentLoginStep == LoginSteps.Main)
                 ls.Connect(_textboxAccount.Text, _textboxPassword.Text);
         }
 
@@ -195,25 +196,17 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 case Buttons.NextArrow:
                     SaveCheckboxStatus();
                     if (!_textboxAccount.IsDisposed)
-                        CUOEnviroment.Client.GetScene<LoginScene>().Connect(_textboxAccount.Text, _textboxPassword.Text);
+                        Client.Game.GetScene<LoginScene>().Connect(_textboxAccount.Text, _textboxPassword.Text);
 
                     break;
 
                 case Buttons.Quit:
-                    CUOEnviroment.Client.Exit();
+                    Client.Game.Exit();
 
                     break;
             }
         }
-
-        protected override void OnInitialize()
-        {
-            base.OnInitialize();
-
-            if (!string.IsNullOrEmpty(_textboxAccount.Text))
-                _textboxPassword.SetKeyboardFocus();
-        }
-
+        
         private enum Buttons
         {
             NextArrow,

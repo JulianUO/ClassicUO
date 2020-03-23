@@ -1,35 +1,31 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using System;
-using System.Text;
 
 using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
 using ClassicUO.Game.Map;
-using ClassicUO.IO;
 using ClassicUO.IO.Resources;
 using ClassicUO.Utility;
 
@@ -40,21 +36,50 @@ namespace ClassicUO.Game.Scenes
 {
     internal partial class GameScene
     {
+        private readonly struct TreeUnion
+        {
+            public TreeUnion(ushort start, ushort end)
+            {
+                Start = start;
+                End = end;
+            }
+
+            public readonly ushort Start, End;
+        }
+
+
         private sbyte _maxGroundZ;
         private int _maxZ;
         private Vector2 _minPixel, _maxPixel;
         private bool _noDrawRoofs;
         private int _objectHandlesCount;
-        //private WeakReference<GameObject>[] _renderList = new WeakReference<GameObject>[2000];
-
-
         private Point _offset, _maxTile, _minTile;
         private int _oldPlayerX, _oldPlayerY, _oldPlayerZ;
-
         private int _renderIndex = 1;
+        private static GameObject[] _renderList = new GameObject[10000];
+        private static GameObject[] _foliages = new GameObject[100];
+        private static readonly GameObject[] _objectHandles = new GameObject[Constants.MAX_OBJECT_HANDLES];
+        private int _renderListCount, _foliageCount;
+        private readonly StaticTiles _empty;
+        private sbyte _foliageIndex;
+        private static readonly TreeUnion[] _treeInfos =
+        {
+            new TreeUnion(0x0D45, 0x0D4C),
+            new TreeUnion(0x0D5C, 0x0D62),
+            new TreeUnion(0x0D73, 0x0D79),
+            new TreeUnion(0x0D87, 0x0D8B),
+            new TreeUnion(0x12BE, 0x12C7),
+            new TreeUnion(0x0D4D, 0x0D53),
+            new TreeUnion(0x0D63, 0x0D69),
+            new TreeUnion(0x0D7A, 0x0D7F),
+            new TreeUnion(0x0D8C, 0x0D90)
+        };
 
-        private GameObject[] _renderList = new GameObject[10000];
-        private int _renderListCount;
+
+        public Point ScreenOffset => _offset;
+        public sbyte FoliageIndex => _foliageIndex;
+
+
 
         public void UpdateMaxDrawZ(bool force = false)
         {
@@ -91,8 +116,11 @@ namespace ClassicUO.Game.Scenes
                 {
                     sbyte tileZ = obj.Z;
 
-                    if (obj is Land)
+                    if (obj is Land l)
                     {
+                        if (l.IsStretched)
+                            tileZ = l.AverageZ;
+
                         if (pz16 <= tileZ)
                         {
                             maxGroundZ = (sbyte) pz16;
@@ -114,7 +142,7 @@ namespace ClassicUO.Game.Scenes
 
                     if (tileZ > pz14 && _maxZ > tileZ)
                     {
-                        ref readonly var itemdata = ref FileManager.TileData.StaticData[obj.Graphic];
+                        ref readonly var itemdata = ref TileDataLoader.Instance.StaticData[obj.Graphic];
 
                         //if (GameObjectHelper.TryGetStaticData(obj, out var itemdata) && ((ulong) itemdata.Flags & 0x20004) == 0 && (!itemdata.IsRoof || itemdata.IsSurface))
                         if (((ulong) itemdata.Flags & 0x20004) == 0 && (!itemdata.IsRoof || itemdata.IsSurface))
@@ -154,7 +182,7 @@ namespace ClassicUO.Game.Scenes
                         {
                             if (!(obj2 is Land))
                             {
-                                ref readonly var itemdata = ref FileManager.TileData.StaticData[obj2.Graphic];
+                                ref readonly var itemdata = ref TileDataLoader.Instance.StaticData[obj2.Graphic];
 
                                 if (((ulong) itemdata.Flags & 0x204) == 0 && itemdata.IsRoof)
                                 {
@@ -190,8 +218,48 @@ namespace ClassicUO.Game.Scenes
             }
         }
 
+        private void IsFoliageUnion(ushort graphic, int x, int y, int z)
+        {
+            for (int i = 0; i < _treeInfos.Length; i++)
+            {
+                ref readonly var info = ref _treeInfos[i];
 
-        private static StaticTiles _empty;
+                if (info.Start <= graphic && graphic <= info.End)
+                {
+                    while (graphic > info.Start)
+                    {
+                        graphic--;
+                        x--;
+                        y++;
+                    }
+
+                    for (graphic = info.Start; graphic <= info.End; graphic++, x++, y--)
+                    {
+                        ApplyFoliageTransparency(graphic, x, y, z);
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        private void ApplyFoliageTransparency(ushort graphic, int x, int y, int z)
+        {
+            Tile tile = World.Map.GetTile(x, y);
+
+            if (tile != null)
+            {
+                for (GameObject obj = tile.FirstNode; obj != null; obj = obj.Right)
+                {
+                    ushort testGraphic = obj.Graphic;
+
+                    if (testGraphic == graphic && obj.Z == z)
+                    {
+                        obj.FoliageIndex = _foliageIndex;
+                    }
+                }
+            }
+        }
 
         private void AddTileToRenderList(GameObject obj, int worldX, int worldY, bool useObjectHandles, int maxZ/*, GameObject entity*/)
         {
@@ -233,46 +301,52 @@ namespace ClassicUO.Game.Scenes
                 bool iscorpse = false;
                 bool ismobile = false;
 
+                bool push_with_priority = false;
+
                 switch (obj)
                 {
                     case Mobile _:
                         maxObjectZ += Constants.DEFAULT_CHARACTER_HEIGHT;
                         ismobile = true;
-
+                        push_with_priority = true;
                         break;
 
                     case Land _:
                         island = true;
                         goto SKIP_HANDLES_CHECK;
 
-                    case Item it when it.IsCorpse:
-                        iscorpse = true;
+                    case Item it:
+
+                        if (it.IsCorpse)
+                        {
+                            iscorpse = true;
+                            push_with_priority = true;
+                        }
+                        else if (it.Offset != Vector3.Zero)
+                        {
+                            push_with_priority = true;
+                        }
+                        goto default;
+
+                    case MovingEffect moveEff:
+                        push_with_priority = true;
+                        goto default;
+
+                    case Multi multi:
+                        push_with_priority = (multi.State & CUSTOM_HOUSE_MULTI_OBJECT_FLAGS.CHMOF_PREVIEW) != 0 &&
+                                                multi.Offset != Vector3.Zero;
+
                         goto default;
 
                     default:
 
-                        itemData = ref FileManager.TileData.StaticData[obj.Graphic];
+                        itemData = ref TileDataLoader.Instance.StaticData[obj.Graphic];
 
                         //if (GameObjectHelper.TryGetStaticData(obj, out itemData))
                         {
                             if (itemData.IsFoliage && World.Season >= Seasons.Winter)
                             {
                                 continue;
-                            }
-
-                            if (obj is Static st)
-                            {
-                                if (StaticFilters.IsTree(st.OriginalGraphic))
-                                {
-                                    if (ProfileManager.Current.TreeToStumps && st.Graphic != Constants.TREE_REPLACE_GRAPHIC)
-                                    {
-                                        if (!itemData.IsImpassable)
-                                            continue;
-                                        st.SetGraphic(Constants.TREE_REPLACE_GRAPHIC);
-                                    }
-                                    else if (st.OriginalGraphic != st.Graphic && !ProfileManager.Current.TreeToStumps)
-                                        st.RestoreOriginalGraphic();
-                                }
                             }
 
                             if (_noDrawRoofs && itemData.IsRoof)
@@ -287,7 +361,8 @@ namespace ClassicUO.Game.Scenes
                             }
 
                             //we avoid to hide impassable foliage or bushes, if present...
-                            if ((ProfileManager.Current.TreeToStumps && itemData.IsFoliage) || (ProfileManager.Current.HideVegetation && !itemData.IsImpassable && StaticFilters.IsVegetation(obj.Graphic)))
+                            if ((ProfileManager.Current.TreeToStumps && itemData.IsFoliage) || 
+                                (ProfileManager.Current.HideVegetation && ((obj is Multi mm && mm.IsVegetation) || (obj is Static st && st.IsVegetation))))
                                 continue;
 
                             //if (HeightChecks <= 0 && (!itemData.IsBridge || ((itemData.Flags & TileFlag.StairBack | TileFlag.StairRight) != 0) || itemData.IsWall))
@@ -302,12 +377,22 @@ namespace ClassicUO.Game.Scenes
 
                 if (useObjectHandles && NameOverHeadManager.IsAllowed(obj as Entity))
                 {
-                    obj.UseObjectHandles = (ismobile ||
-                                            iscorpse ||
-                                            obj is Item it && (!it.IsLocked || it.IsLocked && itemData.IsContainer) && !it.IsMulti) &&
-                                           !obj.ClosedObjectHandles && _objectHandlesCount <= 400;
-                    if (obj.UseObjectHandles)
+                    if ((ismobile ||
+                         iscorpse ||
+                         obj is Item it && (!it.IsLocked || it.IsLocked && itemData.IsContainer) && !it.IsMulti) &&
+                        !obj.ClosedObjectHandles)
+                    {
+                        int index = _objectHandlesCount % Constants.MAX_OBJECT_HANDLES;
+
+                        if (_objectHandles[index] != null && !_objectHandles[index].ObjectHandlesOpened)
+                        {
+                            _objectHandles[index].UseObjectHandles = false;
+                            //_objectHandles[index].ObjectHandlesOpened = false;
+                        }
+                        _objectHandles[index] = obj;
+                        obj.UseObjectHandles = true;
                         _objectHandlesCount++;
+                    }
                 }
                 else if (obj.ClosedObjectHandles)
                 {
@@ -387,47 +472,52 @@ namespace ClassicUO.Game.Scenes
                     continue;
                 }
 
-                if (ismobile || iscorpse)
+                if (push_with_priority)
                     AddOffsetCharacterTileToRenderList(obj, useObjectHandles);
                 else if (!island && itemData.IsFoliage)
                 {
-                    bool check = World.Player.X <= worldX && World.Player.Y <= worldY;
-
-                    if (!check)
+                    if (obj.FoliageIndex != _foliageIndex)
                     {
-                        check = World.Player.Y <= worldY && World.Player.X <= worldX + 1;
+                        sbyte index = 0;
+
+                        bool check = World.Player.X <= worldX && World.Player.Y <= worldY;
 
                         if (!check)
-                            check = World.Player.X <= worldX && World.Player.Y <= worldY + 1;
+                        {
+                            check = World.Player.Y <= worldY && World.Player.X <= worldX + 1;
+
+                            if (!check)
+                                check = World.Player.X <= worldX && World.Player.Y <= worldY + 1;
+                        }
+
+                        if (check)
+                        {
+                            _rectangleObj.X = drawX - obj.FrameInfo.X;
+                            _rectangleObj.Y = drawY - obj.FrameInfo.Y;
+                            _rectangleObj.Width = obj.FrameInfo.Width;
+                            _rectangleObj.Height = obj.FrameInfo.Height;
+
+                            check = Exstentions.InRect(ref _rectangleObj, ref _rectanglePlayer);
+
+                            if (check)
+                            {
+                                index = _foliageIndex;
+                                IsFoliageUnion(obj.Graphic, obj.X, obj.Y, z);
+                            }
+                        }
+
+                        obj.FoliageIndex = index;
                     }
 
-                    if (check)
+                    if (_foliageCount >= _foliages.Length)
                     {
-                        _rectangleObj.X = drawX - obj.FrameInfo.X;
-                        _rectangleObj.Y = drawY - obj.FrameInfo.Y;
-                        _rectangleObj.Width = obj.FrameInfo.Width;
-                        _rectangleObj.Height = obj.FrameInfo.Height;
-
-                        check = Exstentions.InRect(ref _rectangleObj, ref _rectanglePlayer);
+                        int newsize = _foliages.Length + 50;
+                        Array.Resize(ref _foliages, newsize);
                     }
 
-                    switch (obj)
-                    {
-                        case Static st:
-                            st.CharacterIsBehindFoliage = check;
+                    _foliages[_foliageCount++] = obj;
 
-                            break;
-
-                        case Multi m:
-                            m.CharacterIsBehindFoliage = check;
-
-                            break;
-
-                        case Item it:
-                            it.CharacterIsBehindFoliage = check;
-
-                            break;
-                    }
+                    goto FOLIAGE_SKIP;
                 }
 
                 if (!island && _alphaChanged && !changinAlpha)
@@ -437,6 +527,8 @@ namespace ClassicUO.Game.Scenes
                     else if (!itemData.IsFoliage && obj.AlphaHue != 0xFF)
                         obj.ProcessAlpha(0xFF);
                 }
+
+                FOLIAGE_SKIP:
 
                 if (_renderListCount >= _renderList.Length)
                 {
@@ -457,15 +549,17 @@ namespace ClassicUO.Game.Scenes
 
             int dropMaxZIndex = -1;
 
-            if (entity is Mobile mob && mob.Steps.Count != 0)
+            if (entity is Mobile mob)
             {
-                ref var step = ref mob.Steps.Back();
+                if (mob.Steps.Count != 0)
+                {
+                    ref var step = ref mob.Steps.Back();
 
-                if ((step.Direction & 7) == 2)
-                    dropMaxZIndex = 0;
+                    if ((step.Direction & 7) == 2)
+                        dropMaxZIndex = 0;
+                }       
             }
-
-
+            
             for (int i = 0; i < 8; i++)
             {
                 int x = charX;
@@ -627,7 +721,7 @@ namespace ClassicUO.Game.Scenes
             int winGameScaledWidth;
             int winGameScaledHeight;
 
-            if (ProfileManager.Current != null && ProfileManager.Current.EnableScaleZoom)
+            if (ProfileManager.Current != null /*&& ProfileManager.Current.EnableScaleZoom*/)
             {
                 float left = winGamePosX;
                 float right = winGameWidth + left;
@@ -696,20 +790,21 @@ namespace ClassicUO.Game.Scenes
             if (minBlockY < 0)
                 minBlockY = 0;
 
-            if (maxBlockX >= FileManager.Map.MapsDefaultSize[World.Map.Index, 0])
-                maxBlockX = FileManager.Map.MapsDefaultSize[World.Map.Index, 0] - 1;
+            if (maxBlockX >= MapLoader.Instance.MapsDefaultSize[World.Map.Index, 0])
+                maxBlockX = MapLoader.Instance.MapsDefaultSize[World.Map.Index, 0] - 1;
 
-            if (maxBlockY >= FileManager.Map.MapsDefaultSize[World.Map.Index, 1])
-                maxBlockY = FileManager.Map.MapsDefaultSize[World.Map.Index, 1] - 1;
+            if (maxBlockY >= MapLoader.Instance.MapsDefaultSize[World.Map.Index, 1])
+                maxBlockY = MapLoader.Instance.MapsDefaultSize[World.Map.Index, 1] - 1;
 
             int drawOffset = (int) (Scale * 40.0);
-            float maxX = winGamePosX + winGameWidth + drawOffset;
-            float maxY = winGamePosY + winGameHeight + drawOffset;
-            float newMaxX = maxX * Scale;
-            float newMaxY = maxY * Scale;
-            int minPixelsX = (int) ((winGamePosX - drawOffset) * Scale - MAX /*- (newMaxX + maxX)*/);
+            float maxX = winGamePosX + winGameWidth ;
+            float maxY = winGamePosY + winGameHeight;
+            float newMaxX = maxX * Scale + drawOffset;
+            float newMaxY = maxY * Scale + drawOffset;
+            
+            int minPixelsX = (int) ((winGamePosX) * Scale /*- (newMaxX - maxX)*/ ) - drawOffset * 2;
             int maxPixelsX = (int) newMaxX;
-            int minPixelsY = (int) ((winGamePosY - drawOffset) * Scale - MAX /*- (newMaxY + maxY)*/);
+            int minPixelsY = (int) ((winGamePosY) * Scale /*- (newMaxY - maxY)*/) - drawOffset * 2;
             int maxPixlesY = (int) newMaxY;
 
             if (UpdateDrawPosition || oldDrawOffsetX != winDrawOffsetX || oldDrawOffsetY != winDrawOffsetY)
@@ -721,8 +816,8 @@ namespace ClassicUO.Game.Scenes
                     _viewportRenderTarget?.Dispose();
                     _lightRenderTarget?.Dispose();
 
-                    _viewportRenderTarget = new RenderTarget2D(CUOEnviroment.Client.GraphicsDevice, (int)(winGameWidth * Scale), (int)(winGameHeight * Scale), false, SurfaceFormat.Color, DepthFormat.Depth24Stencil8, 0, RenderTargetUsage.DiscardContents);
-                    _lightRenderTarget = new RenderTarget2D(CUOEnviroment.Client.GraphicsDevice, (int)(winGameWidth * Scale), (int)(winGameHeight * Scale), false, SurfaceFormat.Color, DepthFormat.Depth24Stencil8, 0, RenderTargetUsage.DiscardContents);
+                    _viewportRenderTarget = new RenderTarget2D(Client.Game.GraphicsDevice, (int)(winGameWidth * Scale), (int)(winGameHeight * Scale), false, SurfaceFormat.Color, DepthFormat.Depth24Stencil8, 0, RenderTargetUsage.DiscardContents);
+                    _lightRenderTarget = new RenderTarget2D(Client.Game.GraphicsDevice, (int)(winGameWidth * Scale), (int)(winGameHeight * Scale), false, SurfaceFormat.Color, DepthFormat.Depth24Stencil8, 0, RenderTargetUsage.DiscardContents);
                 }
             }
 

@@ -1,53 +1,47 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using System;
 using System.Collections.Generic;
-
 using ClassicUO.Game.Managers;
-using ClassicUO.Interfaces;
-using ClassicUO.IO;
+using ClassicUO.IO.Resources;
 using ClassicUO.Renderer;
 using ClassicUO.Utility.Coroutines;
 using ClassicUO.Utility.Logging;
-
 using SDL2;
+using IUpdateable = ClassicUO.Interfaces.IUpdateable;
 
 namespace ClassicUO.Game.Scenes
 {
     internal abstract class Scene : IUpdateable, IDisposable
     {
-        protected Scene(int width, int height, bool canresize, bool maximized, bool loadaudio)
+        protected Scene(int sceneID,  bool canresize, bool maximized, bool loadaudio)
         {
-            Width = width;
-            Height = height;
             CanResize = canresize;
             CanBeMaximized = maximized;
             CanLoadAudio = loadaudio;
         }
 
-        public readonly int Width, Height;
         public readonly bool CanResize, CanBeMaximized, CanLoadAudio;
+        public readonly int ID;
 
         public bool IsDestroyed { get; private set; }
 
@@ -97,7 +91,7 @@ namespace ClassicUO.Game.Scenes
             Audio?.StopMusic();
             Coroutines.Clear();
         }
-        
+
         public virtual bool Draw(UltimaBatcher2D batcher)
         {
             return true;
@@ -132,19 +126,19 @@ namespace ClassicUO.Game.Scenes
 
             while (!IsDestroyed)
             {
-                FileManager.Art.CleaUnusedResources();
+                ArtLoader.Instance.CleaUnusedResources(Constants.MAX_ART_OBJECT_REMOVED_BY_GARBAGE_COLLECTOR);
 
                 yield return new WaitTime(TimeSpan.FromMilliseconds(500));
 
-                FileManager.Gumps.CleaUnusedResources();
+                GumpsLoader.Instance.CleaUnusedResources(Constants.MAX_GUMP_OBJECT_REMOVED_BY_GARBAGE_COLLECTOR);
 
                 yield return new WaitTime(TimeSpan.FromMilliseconds(500));
 
-                FileManager.Textmaps.CleaUnusedResources();
+                TexmapsLoader.Instance.CleaUnusedResources(Constants.MAX_ART_OBJECT_REMOVED_BY_GARBAGE_COLLECTOR);
 
                 yield return new WaitTime(TimeSpan.FromMilliseconds(500));
 
-                FileManager.Animations.CleaUnusedResources();
+                AnimationsLoader.Instance.CleaUnusedResources(Constants.MAX_ANIMATIONS_OBJECT_REMOVED_BY_GARBAGE_COLLECTOR);
 
                 yield return new WaitTime(TimeSpan.FromMilliseconds(500));
 
@@ -152,7 +146,7 @@ namespace ClassicUO.Game.Scenes
 
                 yield return new WaitTime(TimeSpan.FromMilliseconds(500));
 
-                FileManager.Lights.CleaUnusedResources();
+                LightsLoader.Instance.CleaUnusedResources(20);
 
                 yield return new WaitTime(TimeSpan.FromMilliseconds(500));
             }

@@ -1,24 +1,22 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using System;
@@ -27,19 +25,20 @@ namespace ClassicUO.IO.Audio
 {
     internal class UOSound : Sound
     {
-        private readonly byte[] m_WaveBuffer;
-        private bool m_Playing;
+        private readonly byte[] _waveBuffer;
+        private bool _isPlaying;
 
         public UOSound(string name, int index, byte[] buffer)
             : base(name, index)
         {
-            m_Playing = false;
-            m_WaveBuffer = buffer;
+            _isPlaying = false;
+            _waveBuffer = buffer;
+            Delay = (uint) ((buffer.Length - 32) / 88.2f);
         }
 
         public bool IsPlaying()
         {
-            return m_Playing;
+            return _isPlaying;
         }
 
         protected override void OnBufferNeeded(object sender, EventArgs e)
@@ -49,17 +48,17 @@ namespace ClassicUO.IO.Audio
 
         protected override byte[] GetBuffer()
         {
-            return m_WaveBuffer;
+            return _waveBuffer;
         }
 
         protected override void BeforePlay()
         {
-            m_Playing = true;
+            _isPlaying = true;
         }
 
         protected override void AfterStop()
         {
-            m_Playing = false;
+            _isPlaying = false;
         }
     }
 }

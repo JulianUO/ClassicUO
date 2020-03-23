@@ -1,34 +1,32 @@
 ﻿#region license
-
-//  Copyright (C) 2019 ClassicUO Development Community on Github
-//
-//	This project is an alternative client for the game Ultima Online.
-//	The goal of this is to develop a lightweight client considering 
-//	new technologies.  
-//      
+// Copyright (C) 2020 ClassicUO Development Community on Github
+// 
+// This project is an alternative client for the game Ultima Online.
+// The goal of this is to develop a lightweight client considering
+// new technologies.
+// 
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation, either version 3 of the License, or
 //  (at your option) any later version.
-//
+// 
 //  This program is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //  GNU General Public License for more details.
-//
+// 
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 #endregion
 
 using System;
 using System.Linq;
 
 using ClassicUO.Configuration;
+using ClassicUO.Data;
 using ClassicUO.Game.Scenes;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Input;
-using ClassicUO.IO;
 using ClassicUO.IO.Resources;
 
 using SDL2;
@@ -50,12 +48,18 @@ namespace ClassicUO.Game.UI.Gumps.Login
             int yBonus = 35;
             int listTitleY = 131;
 
-            LoginScene loginScene = CUOEnviroment.Client.GetScene<LoginScene>();
+            LoginScene loginScene = Client.Game.GetScene<LoginScene>();
             var lastSelected = loginScene.Characters.FirstOrDefault(o => o == Settings.GlobalSettings.LastCharacterName);
+
+            var f = World.ClientLockedFeatures.Flags;
+            var ff = World.ClientFeatures.Flags;
 
             Add(new ResizePic(0x06DB)
             {
-                X = 150, Y = 90, Width = 393 - 14, Height = 343
+                X = 150,
+                Y = 90,
+                Width = 393 - 14,
+                Height = 343
             }, 1);
 
             Add(new ResizePic(0x0DAC)
@@ -66,17 +70,34 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 Height = 343 - 40
             });
 
+            if (!string.IsNullOrEmpty(lastSelected))
+                _selectedCharacter = (uint)Array.IndexOf(loginScene.Characters, lastSelected);
+            else if (loginScene.Characters.Length > 0)
+                _selectedCharacter = 0;
+
             Add(new Label("Eleccion de Personaje", false, 0, font: 3)
             {
-                X = 259, Y = listTitleY
+                X = 259,
+                Y = listTitleY
             }, 1);
 
-            for (int i = 0; i < loginScene.Characters.Length; i++)
+            for (int i = 0, valid = 0; i < loginScene.Characters.Length; i++)
             {
                 string character = loginScene.Characters[i];
-
+              
                 if (!string.IsNullOrEmpty(character))
                 {
+                    valid++;
+
+                    if (valid > World.ClientFeatures.MaxChars)
+                        break;
+
+                    if (World.ClientLockedFeatures.Flags != 0 && !World.ClientLockedFeatures.CharSlots7)
+                    {
+                        if (valid == 6 && !World.ClientLockedFeatures.CharSlots6)
+                            break;
+                    }
+
                     Add(new CharacterEntryGump((uint) i, character, SelectCharacter, LoginCharacter)
                     {
                         X = 200,
@@ -87,7 +108,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 }
             }
 
-            if (!World.ClientFeatures.OnePerson || loginScene.Characters.All(string.IsNullOrEmpty))
+            if (CanCreateChar(loginScene))
             {
                 Add(new Button((int) Buttons.New, 0x159D, 0x159F, 0x159E)
                 {
@@ -95,9 +116,11 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 }, 1);
             }
 
-            Add(new Button((int) Buttons.Delete, 0x159A, 0x159C, 0x159B)
+            Add(new Button((int)Buttons.Delete, 0x159A, 0x159C, 0x159B)
             {
-                X = 400, Y = 333 + yBonus, ButtonAction = ButtonAction.Activate
+                X = 400, 
+                Y = 333 + yBonus, 
+                ButtonAction = ButtonAction.Activate
             }, 1);
 
             Add(new Button((int) Buttons.Prev, 0x0605, 0x0606)
@@ -114,6 +137,17 @@ namespace ClassicUO.Game.UI.Gumps.Login
             ChangePage(1);
         }
 
+        private bool CanCreateChar(LoginScene scene)
+        {
+            if (scene.Characters != null)
+            {
+                int empty = scene.Characters.Count(string.IsNullOrEmpty);
+                if (empty > 0 && (scene.Characters.Length - empty) < World.ClientFeatures.MaxChars)
+                    return true;
+            }
+            return false;
+        }
+
         protected override void OnKeyDown(SDL.SDL_Keycode key, SDL.SDL_Keymod mod)
         {
             if (key == SDL.SDL_Keycode.SDLK_RETURN || key == SDL.SDL_Keycode.SDLK_KP_ENTER)
@@ -122,7 +156,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
         public override void OnButtonClick(int buttonID)
         {
-            LoginScene loginScene = CUOEnviroment.Client.GetScene<LoginScene>();
+            LoginScene loginScene = Client.Game.GetScene<LoginScene>();
 
             switch ((Buttons) buttonID)
             {
@@ -131,7 +165,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
                     break;
 
-                case Buttons.New:
+                case Buttons.New when CanCreateChar(loginScene):
                     loginScene.StartCharCreation();
 
                     break;
@@ -161,9 +195,9 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 if (existing != null)
                     Remove(existing);
 
-                Add(new LoadingGump($"Permanently delete {charName}", LoadingGump.Buttons.OK | LoadingGump.Buttons.Cancel, buttonID =>
+                Add(new LoadingGump($"Permanently delete {charName}", LoginButtons.OK | LoginButtons.Cancel, buttonID =>
                 {
-                    if (buttonID == (int) LoadingGump.Buttons.OK)
+                    if (buttonID == (int) LoginButtons.OK)
                         loginScene.DeleteCharacter(_selectedCharacter);
                     else
                         ChangePage(1);
@@ -181,7 +215,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
 
         private void LoginCharacter(uint index)
         {
-            LoginScene loginScene = CUOEnviroment.Client.GetScene<LoginScene>();
+            LoginScene loginScene = Client.Game.GetScene<LoginScene>();
 
             if (loginScene.Characters.Length > index && !string.IsNullOrEmpty(loginScene.Characters[index]))
                 loginScene.SelectCharacter(index);
@@ -229,9 +263,9 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 set => _label.Hue = value;
             }
 
-            protected override bool OnMouseDoubleClick(int x, int y, MouseButton button)
+            protected override bool OnMouseDoubleClick(int x, int y, MouseButtonType button)
             {
-                if (button == MouseButton.Left)
+                if (button == MouseButtonType.Left)
                 {
                     _loginFn(CharacterIndex);
 
@@ -242,9 +276,9 @@ namespace ClassicUO.Game.UI.Gumps.Login
             }
 
 
-            protected override void OnMouseUp(int x, int y, MouseButton button)
+            protected override void OnMouseUp(int x, int y, MouseButtonType button)
             {
-                if (button == MouseButton.Left) _selectedFn(CharacterIndex);
+                if (button == MouseButtonType.Left) _selectedFn(CharacterIndex);
             }
         }
     }
