@@ -351,7 +351,7 @@ namespace ClassicUO.Game.Scenes
         {
             if (CurrentLoginStep == LoginSteps.CharacterSelection)
 			{
-                CurrentLoginStep = LoginSteps.CharCreation;
+                CurrentLoginStep = LoginSteps.CharacterCreation;
                 Audio.PlayMusic(1);
             }
         }
