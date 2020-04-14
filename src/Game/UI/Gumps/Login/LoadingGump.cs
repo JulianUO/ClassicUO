@@ -40,7 +40,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
     {  
 
         private readonly Action<int> _buttonClick;
-        internal readonly Label _Label;
+        private readonly Label _label;
 
         public LoadingGump(string labelText, LoginButtons showButtons, Action<int> buttonClick = null) : base(0, 0)
         {
@@ -48,7 +48,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
             CanCloseWithRightClick = false;
             CanCloseWithEsc = false;
 
-            _Label = new Label(labelText, false, 0, 326, 3, align: TEXT_ALIGN_TYPE.TS_CENTER)
+            _label = new Label(labelText, false, 0, 326, 3, align: TEXT_ALIGN_TYPE.TS_CENTER)
             {
                 X = 173,
                 Y = 178
@@ -90,6 +90,10 @@ namespace ClassicUO.Game.UI.Gumps.Login
             }
         }
 
+        public void SetText(string text)
+        {
+            _label.Text = text;
+        }
         protected override void OnKeyDown(SDL.SDL_Keycode key, SDL.SDL_Keymod mod)
         {
             if (key == SDL.SDL_Keycode.SDLK_KP_ENTER || key == SDL.SDL_Keycode.SDLK_RETURN)
