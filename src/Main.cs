@@ -187,7 +187,7 @@ namespace ClassicUO
                     continue;
 
                 cmd = cmd.Remove(0, 1);
-                string value = null;
+                string value = string.Empty;
 
                 if (i < args.Length - 1)
                 {
@@ -332,7 +332,15 @@ namespace ClassicUO
                         break;
 
                     case "plugins":
-                        Settings.GlobalSettings.Plugins = value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                        Settings.GlobalSettings.Plugins = string.IsNullOrEmpty(value) ? new string[0] : value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                        break;
+
+                    case "use_verdata":
+                        Settings.GlobalSettings.UseVerdata = bool.Parse(value);
+                        break;
+
+                    case "encryption":
+                        Settings.GlobalSettings.Encryption = byte.Parse(value);
                         break;
 
                 }
@@ -397,8 +405,7 @@ namespace ClassicUO
                     UseShellExecute = false,
                 };
 
-                if (Environment.OSVersion.Platform == PlatformID.MacOSX ||
-                    Environment.OSVersion.Platform == PlatformID.Unix)
+                if (CUOEnviroment.IsUnix)
                 {
                     processStartInfo.FileName = "mono";
                     processStartInfo.Arguments = $"\"{Path.Combine(path, "ClassicUO.exe")}\" --source \"{currentPath}\" --pid {Process.GetCurrentProcess().Id} --action cleanup";
