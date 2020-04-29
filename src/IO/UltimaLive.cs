@@ -99,19 +99,19 @@ namespace ClassicUO.IO
                         }
                         return;
                     }
-                    else if (World.Map == null || mapID != World.Map.Index) return;
 
                     int mapWidthInBlocks = MapLoader.Instance.MapBlocksSize[mapID, 0];
                     int mapHeightInBlocks = MapLoader.Instance.MapBlocksSize[mapID, 1];
                     int blocks = mapWidthInBlocks * mapHeightInBlocks;
 
                     if (block < 0 || block >= blocks) return;
-
+                    
                     if (_UL.MapCRCs[mapID] == null)
                     {
                         _UL.MapCRCs[mapID] = new ushort[blocks];
                         for (int j = 0; j < blocks; j++) _UL.MapCRCs[mapID][j] = ushort.MaxValue;
                     }
+                    
 
                     int blockX = block / mapHeightInBlocks;
                     int blockY = block % mapHeightInBlocks;
@@ -448,7 +448,7 @@ namespace ClassicUO.IO
 
         internal static ushort GetBlockCrc(uint block)
         {
-            int mapID = World.Map.Index;
+            int mapID = 0;
             _UL._filesIdxStatics[mapID].Seek(block * 12);
             uint lookup = _UL._filesIdxStatics[mapID].ReadUInt();
             int bytecount = Math.Max(0, _UL._filesIdxStatics[mapID].ReadInt());

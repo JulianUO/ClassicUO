@@ -125,11 +125,12 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
             World.Mobiles.Add(_character);
 
             if (isFemale)
+            { 
                 _character.Flags |= Flags.Female;
-                character.Graphic = 0x0191;
-                character.Equipment[(int) Layer.Shoes] = CreateItem(0x1710, 0x0384, Layer.Shoes);
-                character.Equipment[(int) Layer.Skirt] = CreateItem(0x1531, CurrentColorOption[Layer.Pants].Item2, Layer.Skirt);
-                character.Equipment[(int) Layer.Shirt] = CreateItem(0x1518, CurrentColorOption[Layer.Shirt].Item2, Layer.Shirt);
+                _character.Graphic = 0x0191;
+                _character.Equipment[(int) Layer.Shoes] = CreateItem(0x1710, 0x0384, Layer.Shoes);
+                _character.Equipment[(int) Layer.Skirt] = CreateItem(0x1531, CurrentColorOption[Layer.Pants].Item2, Layer.Skirt);
+                _character.Equipment[(int) Layer.Shirt] = CreateItem(0x1518, CurrentColorOption[Layer.Shirt].Item2, Layer.Shirt);
             }
             else
             {

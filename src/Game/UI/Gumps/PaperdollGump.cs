@@ -70,11 +70,18 @@ namespace ClassicUO.Game.UI.Gumps
             CanCloseWithRightClick = true;
         }
 
-        public PaperDollGump(uint serial) : this()
+        public PaperDollGump(uint serial, bool canLift) : this()
         {
             LocalSerial = serial;
+            CanLift = canLift;
+
             Mobile mobile = World.Mobiles.Get(serial);
-            BuildGump();
+            if (mobile != null)
+            {
+                BuildGump();
+            }
+            else
+                Dispose();
         }
 
         public override GUMP_TYPE GumpType => GUMP_TYPE.GT_PAPERDOLL;

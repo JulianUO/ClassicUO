@@ -67,7 +67,7 @@ namespace ClassicUO.Game.UI.Gumps.Login
                 Height = 212 - 40
             });
 
-            Add(_Label);
+            Add(_label);
 
             if (showButtons == LoginButtons.OK)
             {
