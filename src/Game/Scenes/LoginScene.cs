@@ -514,6 +514,11 @@ namespace ClassicUO.Game.Scenes
                             SelectServer((byte) Servers[index - 1].Index);
                         }
                     }
+                    else
+                    {
+                        if (Servers.Length == 1)
+                            SelectServer((byte)Servers[0].Index);
+                    }
 
                     break;
 
