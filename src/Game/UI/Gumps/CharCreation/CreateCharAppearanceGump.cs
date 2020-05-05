@@ -115,14 +115,14 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
 
         private void CreateCharacter(bool isFemale, RaceType race)
         {
-            if (_character != null)
-                World.Mobiles.Remove(_character);
-
-            _character = new PlayerMobile(0)
+            if (_character == null)
             {
-                Race = race
-            };
-            World.Mobiles.Add(_character);
+                _character = new PlayerMobile(1);
+                World.Mobiles.Add(_character);
+            }
+
+            _character.Clear();
+            _character.Race = race;
 
             if (isFemale)
             { 
@@ -153,12 +153,14 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
             {
                 layer = Layer.Beard;
                 content = CharacterCreationValues.GetFacialHairComboContent(race);
-                _character.Equipment[(int) layer] = CreateItem(content.GetGraphic(CurrentOption[layer]), CurrentColorOption[layer].Item2, layer);
+                Item iti = CreateItem(content.GetGraphic(CurrentOption[layer]), CurrentColorOption[layer].Item2, layer);
+                _character.PushToBack(iti);
             }
 
             layer = Layer.Hair;
             content = CharacterCreationValues.GetHairComboContent(isFemale, race);
-            _character.Equipment[(int) layer] = CreateItem(content.GetGraphic(CurrentOption[layer]), CurrentColorOption[layer].Item2, layer);
+            Item it = CreateItem(content.GetGraphic(CurrentOption[layer]), CurrentColorOption[layer].Item2, layer);
+            _character.PushToBack(it);
         }
 
         private void Race_ValueChanged(object sender, EventArgs e)
@@ -277,6 +279,9 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
 
         private void ColorPicker_ColorSelected(object sender, ColorSelectedEventArgs e)
         {
+            if (e.SelectedIndex == 0xFFFF)
+                return;
+
             CurrentColorOption[e.Layer] = new Tuple<int, ushort>(e.SelectedIndex, e.SelectedHue);
 
             if (e.Layer != Layer.Invalid)
@@ -284,9 +289,9 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
                 Item item;
 
                 if (_character.Race == RaceType.GARGOYLE && e.Layer == Layer.Shirt)
-                    item = _character.Equipment[(int) Layer.Robe];
+                    item = _character.FindItemByLayer(Layer.Robe);
                 else
-                    item = _character.Equipment[(int) e.Layer];
+                    item = _character.FindItemByLayer(e.Layer);
 
                 if (item != null)
                     item.Hue = e.SelectedHue;
@@ -366,12 +371,21 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
             if (id == 0)
                 return null;
 
+            Item existsItem = _character.FindItemByLayer(layer);
+
+            if (existsItem != null)
+            {
+                World.RemoveItem(existsItem, true);
+                _character.Remove(existsItem);
+            }
+
             // This is a workaround to avoid to see naked guy
             // We are simulating server objects into World.Items map.
-            var item = World.GetOrCreateItem((uint)layer); // use layer as unique Serial
+            var item = World.GetOrCreateItem(0x4000_0000 + (uint)layer); // use layer as unique Serial
             item.Graphic = (ushort)id;
             item.Hue = hue;
             item.Layer = layer;
+            item.Container = _character;
             //
 
             return item;
@@ -403,7 +417,7 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
 
             public int SelectedIndex { get; }
 
-            public ushort SelectedHue => Pallet != null && SelectedIndex >= 0 && SelectedIndex < Pallet.Length ? (ushort) (Pallet[SelectedIndex] + 1) : (ushort) 0;
+            public ushort SelectedHue => Pallet != null && SelectedIndex >= 0 && SelectedIndex < Pallet.Length ? (ushort) (Pallet[SelectedIndex] + 1) : (ushort) 0xFFFF;
         }
 
         private class CustomColorPicker : Control
@@ -457,7 +471,9 @@ namespace ClassicUO.Game.UI.Gumps.CharCreation
                 int column = e.X / _cellW;
                 int row = e.Y / _cellH;
                 var selectedIndex = row * _columns + column;
-                ColorSelected?.Invoke(this, new ColorSelectedEventArgs(_layer, _colorPickerBox.Hues, selectedIndex));
+
+                if (selectedIndex >= 0 && selectedIndex < _colorPickerBox.Hues.Length)
+                    ColorSelected?.Invoke(this, new ColorSelectedEventArgs(_layer, _colorPickerBox.Hues, selectedIndex));
             }
 
             public event EventHandler<ColorSelectedEventArgs> ColorSelected;
