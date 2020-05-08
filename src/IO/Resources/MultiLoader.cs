@@ -67,8 +67,9 @@ namespace ClassicUO.IO.Resources
             return Task.Run(() =>
             {
                 string uopPath = UOFileManager.GetUOFilePath("MultiCollection.uop");
+                bool isUsingUOP = false;
 
-                if (Client.IsUOPInstallation && System.IO.File.Exists(uopPath))
+                if (Client.IsUOPInstallation && System.IO.File.Exists(uopPath) && isUsingUOP == true)
                 {
                     Count = Constants.MAX_MULTI_DATA_INDEX_COUNT;
                     _file = new UOFileUop(uopPath, "build/multicollection/{0:D6}.bin");

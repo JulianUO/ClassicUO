@@ -986,14 +986,14 @@ namespace ClassicUO.Game.UI.Gumps
                     Height = _background.Texture.Height;
 
                     // add backgrounds
-                    Add(_hpLineRed = new GumpPic(34, 12, LINE_RED, 0));
-                    Add(new GumpPic(34, 25, LINE_RED, 0));
-                    Add(new GumpPic(34, 38, LINE_RED, 0));
+                    Add(_hpLineRed = new GumpPic(34, 11, LINE_RED, 0));
+                    Add(new GumpPic(34, 24, LINE_RED, 0));
+                    Add(new GumpPic(34, 37, LINE_RED, 0));
 
                     // add over
-                    Add(_bars[0] = new GumpPicWithWidth(34, 12, LINE_BLUE, 0, 0));
-                    Add(_bars[1] = new GumpPicWithWidth(34, 25, LINE_BLUE, 0, 0));
-                    Add(_bars[2] = new GumpPicWithWidth(34, 38, LINE_BLUE, 0, 0));
+                    Add(_bars[0] = new GumpPicWithWidth(34, 11, LINE_BLUE, 0, 0));
+                    Add(_bars[1] = new GumpPicWithWidth(34, 24, LINE_BLUE, 0, 0));
+                    Add(_bars[2] = new GumpPicWithWidth(34, 37, LINE_BLUE, 0, 0));
                 }
                 else
                 {
@@ -1011,20 +1011,43 @@ namespace ClassicUO.Game.UI.Gumps
                             textColor = 0x000E;
                     }
 
-                    ushort barColor = entity == null || entity == World.Player || mobile == null || mobile.NotorietyFlag == NotorietyFlag.Criminal || mobile.NotorietyFlag == NotorietyFlag.Gray ? (ushort) 0 : Notoriety.GetHue(mobile.NotorietyFlag);
+                    ushort barGump;
+                    switch (mobile.NotorietyFlag)
+                    {
+                        case NotorietyFlag.Ally: // green
+                            barGump = 0x0810;
+                            break;
+                        case NotorietyFlag.Innocent: // blue
+                            barGump = 0x080f;
+                            break;
+                        case NotorietyFlag.Invulnerable: // yellow
+                            barGump = 0x0813;
+                            break;
+                        case NotorietyFlag.Enemy: // orange
+                            barGump = 0x0811;
+                            break;
+                        case NotorietyFlag.Murderer: // red
+                            barGump = 0x0812;
+                            break;
+                        case NotorietyFlag.Criminal: // gray
+                        case NotorietyFlag.Gray:
+                        default:
+                            barGump = 0x0804;
+                            break;
+                    }
 
-                    Add(_background = new GumpPic(0, 0, 0x0804, barColor) { ContainsByBounds = true });
-                    Add(_hpLineRed = new GumpPic(34, 38, LINE_RED, hitsColor));
-                    Add(_bars[0] = new GumpPicWithWidth(34, 38, LINE_BLUE, 0, 0));
+                    Add(_background = new GumpPic(0, 0, barGump, 0) { ContainsByBounds = true });
+                    Add(_hpLineRed = new GumpPic(33, 38, LINE_RED, hitsColor));
+                    Add(_bars[0] = new GumpPicWithWidth(33, 38, LINE_BLUE, 0, 0));
 
                     Width = _background.Texture.Width;
                     Height = _background.Texture.Height;
 
                     Add(_textBox = new TextBox(1, 32, width: 120, isunicode: false, hue: textColor, style: FontStyle.Fixed)
                     {
-                        X = 16,
-                        Y = 14,
-                        Width = 120,
+                        X = 17,
+                        Y = 17,
+                        Width = 110,
                         Height = 15,
                         IsEditable = false,
                         AcceptMouseInput = _canChangeName,
@@ -1104,8 +1127,8 @@ namespace ClassicUO.Game.UI.Gumps
                         }
                     }
 
-                    if (_background.Hue != 0)
-                        _background.Hue = 0;
+                    if (_background.Hue != 0x03b2)
+                        _background.Hue = 0x03b2;
 
                     if (_hpLineRed.Hue != hitsColor)
                     {
@@ -1176,6 +1199,9 @@ namespace ClassicUO.Game.UI.Gumps
 
                     hitsColor = 0;
 
+                    if (_background.Hue != 0)
+                        _background.Hue = 0;
+
                     if (inparty)
                     {
                         _buttonHeal1.IsVisible = _buttonHeal2.IsVisible = true;
@@ -1198,6 +1224,7 @@ namespace ClassicUO.Game.UI.Gumps
                     _bars[0].IsVisible = true;
                 }
 
+
                 if (inparty && mobile != null)
                     textColor = Notoriety.GetHue(mobile.NotorietyFlag);
                 else
@@ -1208,14 +1235,8 @@ namespace ClassicUO.Game.UI.Gumps
                     }
                 }
 
-
                 if (_textBox != null && _textBox.Hue != textColor)
                     _textBox.Hue = textColor;
-
-                ushort barColor = entity == World.Player || mobile == null || mobile.NotorietyFlag == NotorietyFlag.Criminal || mobile.NotorietyFlag == NotorietyFlag.Gray ? (ushort) 0 : Notoriety.GetHue(mobile.NotorietyFlag);
-
-                if (_background.Hue != barColor)
-                    _background.Hue = barColor;
 
                 if (mobile != null && mobile.IsPoisoned && !_poisoned)
                 {

@@ -35,6 +35,7 @@ namespace ClassicUO.Game.GameObjects
     internal abstract class Entity : GameObject, IEquatable<Entity>
     {
         private Direction _direction;
+        private Item[] _equipment;
 
         protected Entity(uint serial)
         {
@@ -43,11 +44,25 @@ namespace ClassicUO.Game.GameObjects
 
 
         public uint LastStepTime;
+
         protected long LastAnimationChangeTime;
+
+
+        public bool HasEquipment => _equipment != null;
+
+        public Item[] Equipment
+        {
+            get => _equipment ?? (_equipment = new Item[(int)Layer.Bank + 0x11]);
+            set => _equipment = value;
+        }
+
         public uint Serial;
         public bool IsClicked;
+
         public ushort Hits;
+
         public ushort HitsMax;
+
         public string Name;
 
         public bool IsHidden => (Flags & Flags.Hidden) != 0;
@@ -72,16 +87,16 @@ namespace ClassicUO.Game.GameObjects
 
         public void FixHue(ushort hue)
         {
-            ushort fixedColor = (ushort) (hue & 0x3FFF);
+            ushort fixedColor = (ushort)(hue & 0x3FFF);
 
             if (fixedColor != 0)
             {
                 if (fixedColor >= 0x0BB8)
                     fixedColor = 1;
-                fixedColor |= (ushort) (hue & 0xC000);
+                fixedColor |= (ushort)(hue & 0xC000);
             }
             else
-                fixedColor = (ushort) (hue & 0x8000);
+                fixedColor = (ushort)(hue & 0x8000);
 
             Hue = fixedColor;
         }
@@ -114,7 +129,7 @@ namespace ClassicUO.Game.GameObjects
 
                 for (var i = Items; i != null; i = i.Next)
                 {
-                    Item it = (Item) i;
+                    Item it = (Item)i;
 
                     if (it.Graphic == graphic)
                     {
@@ -141,7 +156,7 @@ namespace ClassicUO.Game.GameObjects
             {
                 for (var i = Items; i != null; i = i.Next)
                 {
-                    Item it = (Item) i;
+                    Item it = (Item)i;
 
                     if (it.Graphic == graphic && it.Hue == hue)
                         item = it;
@@ -163,7 +178,7 @@ namespace ClassicUO.Game.GameObjects
         {
             for (var i = Items; i != null; i = i.Next)
             {
-                Item item = (Item) i;
+                Item item = (Item)i;
 
                 if (item.Graphic == graphic)
                     return item;
@@ -172,7 +187,7 @@ namespace ClassicUO.Game.GameObjects
                 {
                     for (var ic = Items; ic != null; ic = ic.Next)
                     {
-                        Item childItem = (Item) ic;
+                        Item childItem = (Item)ic;
 
                         Item res = childItem.GetItemByGraphic(graphic, deepsearch);
 
@@ -189,7 +204,7 @@ namespace ClassicUO.Game.GameObjects
         {
             for (var i = Items; i != null; i = i.Next)
             {
-                Item it = (Item) i;
+                Item it = (Item)i;
 
                 if (it.Layer == layer)
                     return it;
@@ -230,7 +245,7 @@ namespace ClassicUO.Game.GameObjects
                 {
                     var next = obj.Next;
 
-                    Item it = (Item) obj;
+                    Item it = (Item)obj;
 
                     if (it.Layer != 0)
                     {
@@ -246,7 +261,7 @@ namespace ClassicUO.Game.GameObjects
                         it.Destroy();
                         Remove(obj);
                     }
-                    
+
                     obj = next;
                 }
 
@@ -254,6 +269,13 @@ namespace ClassicUO.Game.GameObjects
                 Items = new_first;
 
             }
+        }
+
+
+        public override void Destroy()
+        {
+            _equipment = null;
+            base.Destroy();
         }
 
 
@@ -284,7 +306,7 @@ namespace ClassicUO.Game.GameObjects
 
         public override int GetHashCode()
         {
-            return (int) Serial;
+            return (int)Serial;
         }
 
         public abstract void ProcessAnimation(out byte dir, bool evalutate = false);
