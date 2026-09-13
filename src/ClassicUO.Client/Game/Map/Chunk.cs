@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -91,12 +91,10 @@ namespace ClassicUO.Game.Map
                 for (int x = 0; x < 8; ++x, ++pos)
                 {
                     ushort tileID = (ushort)(cells[pos].TileID & 0x3FFF);
-
                     sbyte z = cells[pos].Z;
+                    ushort tileX = (ushort)(bx + x);
 
                     Land land = Land.Create(_world, tileID);
-
-                    ushort tileX = (ushort)(bx + x);
 
                     land.ApplyStretch(map, tileX, tileY, z);
                     land.X = tileX;

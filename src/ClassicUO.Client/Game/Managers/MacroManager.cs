@@ -1182,7 +1182,7 @@ namespace ClassicUO.Game.Managers
 
                 case MacroType.CloseGump:
 
-                    UIManager.Gumps.Where(s => !(s is TopBarGump) && !(s is BuffGump) && !(s is WorldViewportGump)).ToList().ForEach(s => s.Dispose());
+                    UIManager.Gumps.Where(s => !(s is TopBarGump) && !(s is TopBarRadarGump) && !(s is BuffGump) && !(s is WorldViewportGump)).ToList().ForEach(s => s.Dispose());
 
                     break;
 

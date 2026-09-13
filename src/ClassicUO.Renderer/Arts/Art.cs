@@ -42,6 +42,9 @@ namespace ClassicUO.Renderer.Arts
 
             if (spriteInfo.Texture == null)
             {
+                if (TryLoadOverride(idx, ref spriteInfo))
+                    return ref spriteInfo;
+
                 var artInfo = _artLoader.GetArt(idx);
 
                 if (artInfo.Pixels.IsEmpty && idx > 0)
@@ -60,6 +63,7 @@ namespace ClassicUO.Renderer.Arts
                     artInfo.Height,
                     out spriteInfo.UV
                 );
+                spriteInfo.LogicalSize = new Point(artInfo.Width, artInfo.Height);
 
                 if (idx > 0x4000)
                 {
@@ -216,6 +220,80 @@ namespace ClassicUO.Renderer.Arts
                 ? Rectangle.Empty
                 : _realArtBounds[idx];
 
-        public bool PixelCheck(uint idx, int x, int y) => _picker.Get(idx, x, y);
+        public bool PixelCheck(uint idx, int x, int y)
+        {
+            uint spriteIdx = idx + 0x4000;
+            if (spriteIdx < (uint)_spriteInfos.Length)
+            {
+                ref var sprite = ref _spriteInfos[spriteIdx];
+                if (sprite.LogicalSize.X > 0 && sprite.UV.Width > 0 && sprite.LogicalSize.X != sprite.UV.Width)
+                {
+                    x = x * sprite.UV.Width / sprite.LogicalSize.X;
+                    y = y * sprite.UV.Height / sprite.LogicalSize.Y;
+                }
+            }
+
+            return _picker.Get(idx, x, y);
+        }
+
+        private bool TryLoadOverride(uint idx, ref SpriteInfo spriteInfo)
+        {
+            if (idx < 0x4000)
+            {
+                if (!CustomArtOverride.TryLoadLand(idx, 44, 44, out var pixels, out int width, out int height))
+                    return false;
+
+                spriteInfo.Texture = _atlas.AddSprite(pixels, width, height, out spriteInfo.UV);
+                spriteInfo.LogicalSize = new Point(44, 44);
+                return true;
+            }
+
+            uint staticIdx = idx - 0x4000;
+            if (!_artLoader.TryGetArtSize(idx, out int origW, out int origH))
+            {
+                origW = origH = 0;
+            }
+
+            if (!CustomArtOverride.TryLoadStatic(staticIdx, origW, origH, out var staticPixels, out int ow, out int oh))
+                return false;
+
+            spriteInfo.Texture = _atlas.AddSprite(staticPixels, ow, oh, out spriteInfo.UV);
+            spriteInfo.LogicalSize = new Point(origW > 0 ? origW : ow, origH > 0 ? origH : oh);
+            _picker.Set(staticIdx, ow, oh, staticPixels);
+            _realArtBounds[staticIdx] = ComputeArtBounds(staticPixels, ow, oh, spriteInfo.LogicalSize);
+            return true;
+        }
+
+        private static Rectangle ComputeArtBounds(uint[] pixels, int width, int height, Point logicalSize)
+        {
+            int minX = width, minY = height, maxX = 0, maxY = 0;
+            int pos = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (pixels[pos++] != 0)
+                    {
+                        minX = Math.Min(minX, x);
+                        maxX = Math.Max(maxX, x);
+                        minY = Math.Min(minY, y);
+                        maxY = Math.Max(maxY, y);
+                    }
+                }
+            }
+
+            if (maxX < minX)
+                return Rectangle.Empty;
+
+            if (logicalSize.X > 0 && width != logicalSize.X)
+            {
+                minX = minX * logicalSize.X / width;
+                maxX = maxX * logicalSize.X / width;
+                minY = minY * logicalSize.Y / height;
+                maxY = maxY * logicalSize.Y / height;
+            }
+
+            return new Rectangle(minX, minY, maxX - minX, maxY - minY);
+        }
     }
 }

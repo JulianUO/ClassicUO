@@ -298,6 +298,7 @@ namespace ClassicUO.Network
             Handler.Add(0xF5, DisplayMap);
             Handler.Add(0xF6, BoatMoving);
             Handler.Add(0xF7, PacketList);
+            Handler.Add(0xFE, UniversalCommandHandler);
 
             // login
             Handler.Add(0xA8, ServerListReceived);
@@ -2982,9 +2983,9 @@ namespace ClassicUO.Network
 
                     ref readonly var artInfo = ref Client.Game.UO.Arts.GetArt(graphic);
 
-                    if (artInfo.UV.Width != 0 && artInfo.UV.Height != 0)
+                    if (artInfo.DrawWidth != 0 && artInfo.DrawHeight != 0)
                     {
-                        int posY = artInfo.UV.Height;
+                        int posY = artInfo.DrawHeight;
 
                         if (posY >= 47)
                         {
@@ -2997,7 +2998,7 @@ namespace ClassicUO.Network
 
                         gump.AddItem(graphic, hue, name, posX, posY, i + 1);
 
-                        posX += artInfo.UV.Width;
+                        posX += artInfo.DrawWidth;
                     }
                 }
 
@@ -5629,6 +5630,32 @@ namespace ClassicUO.Network
         private static void RemoveWaypoint(World world, ref StackDataReader p)
         {
             uint serial = p.ReadUInt32BE();
+        }
+
+        private static void UniversalCommandHandler(World world, ref StackDataReader p)
+        {
+            ushort cmd = p.ReadUInt16BE();
+            string text = p.ReadASCII();
+
+            switch (cmd)
+            {
+                case 0x01: // Current Place
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        TopBarGump.SetCurrentPlace(world, text);
+                    }
+                    break;
+
+                case 0x02: // Discovered Place
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        var discoveredGump = UIManager.GetGump<DiscoveredPlaceGump>();
+                        discoveredGump?.Dispose();
+
+                        UIManager.Add(new DiscoveredPlaceGump(world, text));
+                    }
+                    break;
+            }
         }
 
         private static void KrriosClientSpecial(World world, ref StackDataReader p)

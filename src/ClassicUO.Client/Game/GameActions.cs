@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
 using System;
 using ClassicUO.Configuration;
@@ -148,6 +148,13 @@ namespace ClassicUO.Game
 
         public static void OpenMiniMap(World world)
         {
+            TopBarGump topBar = UIManager.GetGump<TopBarGump>();
+            if (topBar != null && !topBar.IsDisposed)
+            {
+                topBar.ToggleRadar();
+                return;
+            }
+
             MiniMapGump miniMapGump = UIManager.GetGump<MiniMapGump>();
 
             if (miniMapGump == null)

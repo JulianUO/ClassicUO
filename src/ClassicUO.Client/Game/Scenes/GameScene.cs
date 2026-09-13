@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
 using ClassicUO.Assets;
 using ClassicUO.Configuration;
@@ -70,10 +70,14 @@ namespace ClassicUO.Game.Scenes
         // Track the previously highlighted mesh sprite so we can restore its hue
         private GameObject _prevMeshHighlight;
 
+        private readonly FogOfWarRenderer _fogOfWarRenderer;
+        private Point _lastSentScreenSize;
+
         public GameScene(World world)
         {
             _world = world;
             _useItemQueue = new UseItemQueue(world);
+            _fogOfWarRenderer = new FogOfWarRenderer(world);
         }
 
         public bool UpdateDrawPosition { get; set; }
@@ -110,6 +114,7 @@ namespace ClassicUO.Game.Scenes
             _world.Macros.Load();
             _animatedStaticsManager = new AnimatedStaticsManager();
             _animatedStaticsManager.Initialize();
+            _fogOfWarRenderer.Initialize(Client.Game.GraphicsDevice);
             _world.InfoBars.Load();
             _healthLinesManager = new HealthLinesManager(_world);
 
@@ -148,6 +153,12 @@ namespace ClassicUO.Game.Scenes
 
                 Client.Game.SetWindowSize(w, h);
             }
+
+            int screenW = Camera.Bounds.Width > 0 ? Camera.Bounds.Width : Client.Game.ClientBounds.Width;
+            int screenH = Camera.Bounds.Height > 0 ? Camera.Bounds.Height : Client.Game.ClientBounds.Height;
+            _lastSentScreenSize = new Point(screenW, screenH);
+            NetClient.Socket.Send_ScreenSize(screenW, screenH);
+
 
             Plugin.OnConnected();
         }
@@ -641,8 +652,9 @@ namespace ClassicUO.Game.Scenes
                     if (chunk == null || chunk.IsDestroyed)
                         continue;
 
-                    // Build chunk mesh if dirty
-                    if (chunk.Mesh.IsDirty)
+                    // Build chunk mesh if dirty or terrain smoothing changed
+                    bool smoothTerrain = ProfileManager.CurrentProfile?.SmoothTerrain == true;
+                    if (chunk.Mesh.IsDirty || chunk.Mesh.BuiltWithSmoothTerrain != smoothTerrain)
                     {
                         chunk.Mesh.Build(chunk, _world, Client.Game.GraphicsDevice);
                     }
@@ -650,6 +662,8 @@ namespace ClassicUO.Game.Scenes
                     // Reset visibility and alpha for this frame
                     chunk.Mesh.Land.ResetVisibility();
                     chunk.Mesh.Land.ResetAlpha();
+                    chunk.Mesh.LandBlends.ResetVisibility();
+                    chunk.Mesh.LandBlends.ResetAlpha();
                     chunk.Mesh.Statics.ResetVisibility();
                     chunk.Mesh.Statics.ResetAlpha();
 
@@ -753,6 +767,27 @@ namespace ClassicUO.Game.Scenes
             _animatedStaticsManager.Process();
             _world.BoatMovingManager.Update();
             _world.Player.Pathfinder.ProcessAutoWalk();
+
+            int curScreenW = Camera.Bounds.Width > 0 ? Camera.Bounds.Width : Client.Game.ClientBounds.Width;
+            int curScreenH = Camera.Bounds.Height > 0 ? Camera.Bounds.Height : Client.Game.ClientBounds.Height;
+            if (_lastSentScreenSize.X != curScreenW || _lastSentScreenSize.Y != curScreenH)
+            {
+                _lastSentScreenSize = new Point(curScreenW, curScreenH);
+                NetClient.Socket.Send_ScreenSize(curScreenW, curScreenH);
+            }
+
+
+
+            // Fog of War mist animation
+            if (ProfileManager.CurrentProfile.EnableFogMistEffect || UltimaLive.UltimaLiveActive || FogOfWarManager.Instance.IsActive)
+            {
+                float dt = Time.Delta > 0 ? Time.Delta : (float)Client.Game.TargetElapsedTime.TotalSeconds;
+                _fogOfWarRenderer.Update(
+                    dt,
+                    _offset.X, _offset.Y,
+                    Camera.Bounds.Width, Camera.Bounds.Height);
+            }
+
             _world.DelayedObjectClickManager.Update();
 
             if (!MoveCharacterByMouseInput() && !currentProfile.DisableArrowBtn)
@@ -937,6 +972,11 @@ namespace ClassicUO.Game.Scenes
             Viewport r_viewport = batcher.GraphicsDevice.Viewport;
             Viewport camera_viewport = Camera.GetViewport();
             Matrix matrix = Camera.ViewTransformMatrix;
+            float worldScale = renderTargets.WorldRenderScale;
+            if (worldScale != 1f)
+            {
+                matrix *= Matrix.CreateScale(worldScale);
+            }
 
             bool can_draw_lights = false;
 
@@ -953,6 +993,16 @@ namespace ClassicUO.Game.Scenes
         private void DrawWorld(UltimaBatcher2D batcher, ref Matrix matrix, RenderTargets renderTargets)
         {
             batcher.GraphicsDevice.SetRenderTarget(renderTargets.WorldRenderTarget);
+            if (renderTargets.WorldRenderTarget != null)
+            {
+                batcher.GraphicsDevice.Viewport = new Viewport(
+                    0,
+                    0,
+                    renderTargets.WorldRenderTarget.Width,
+                    renderTargets.WorldRenderTarget.Height
+                );
+            }
+            batcher.GraphicsDevice.Clear(ClearOptions.Target, Color.Black, 0f, 0);
             SelectedObject.Object = null;
             Profiler.EnterContext(Profiler.ProfilerContext.RENDER_FRAME_WORLD_PREPARE);
             FillGameObjectList();
@@ -982,7 +1032,8 @@ namespace ClassicUO.Game.Scenes
                 if (chunk?.Mesh != null)
                 {
                     var layer = selObj is Land ? chunk.Mesh.Land : chunk.Mesh.Statics;
-                    float shaderType = selObj is Land land && land.IsStretched
+                    float shaderType = selObj is Land land
+                        && land.ShouldDrawTexmap(ProfileManager.CurrentProfile?.SmoothTerrain == true)
                         ? ShaderHueTranslator.SHADER_LAND_HUED
                         : ShaderHueTranslator.SHADER_HUED;
                     layer.SetHue(
@@ -1042,6 +1093,23 @@ namespace ClassicUO.Game.Scenes
             // draw weather
             _world.Weather.Draw(batcher, 0, 0, MAX_LAYER_DEPTH - 1);
 
+            // Fog of War overlay
+            if (_world.Map != null && (ProfileManager.CurrentProfile.EnableFogOfWar || UltimaLive.UltimaLiveActive || FogOfWarManager.Instance.IsActive))
+            {
+                batcher.SetStencil(DepthStencilState.None);
+                int mapId = _world.Map.Index;
+                int mapHeightInBlocks = Client.Game.UO.FileManager.Maps.MapBlocksSize[mapId, 1];
+                _fogOfWarRenderer.Draw(
+                    batcher,
+                    ref matrix,
+                    mapId,
+                    _offset.X, _offset.Y,
+                    _minTile.X >> 3, _minTile.Y >> 3,
+                    _maxTile.X >> 3, _maxTile.Y >> 3,
+                    mapHeightInBlocks);
+                batcher.SetStencil(DepthStencilState.Default);
+            }
+
             DrawSelection(batcher, MAX_LAYER_DEPTH);
 
             batcher.SetSampler(null);
@@ -1072,6 +1140,15 @@ namespace ClassicUO.Game.Scenes
             }
 
             batcher.GraphicsDevice.SetRenderTarget(renderTargets.LightRenderTarget);
+            if (renderTargets.LightRenderTarget != null)
+            {
+                batcher.GraphicsDevice.Viewport = new Viewport(
+                    0,
+                    0,
+                    renderTargets.LightRenderTarget.Width,
+                    renderTargets.LightRenderTarget.Height
+                );
+            }
             batcher.GraphicsDevice.Clear(ClearOptions.Target, Color.Black, 0f, 0);
 
             if (!UseAltLights)

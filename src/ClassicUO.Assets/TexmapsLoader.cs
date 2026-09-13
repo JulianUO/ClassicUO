@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
 using ClassicUO.IO;
 using ClassicUO.Utility;
@@ -85,7 +85,15 @@ namespace ClassicUO.Assets
 
                 for (int j = 0; j < size; ++j)
                 {
-                    data[pos + j] = HuesHelper.Color16To32(_file.ReadUInt16()) | 0xFF_00_00_00;
+                    ushort c16 = _file.ReadUInt16();
+                    if (c16 == 0x7C1F || c16 == 0xF81F)
+                    {
+                        data[pos + j] = 0xFF_00_00_00;
+                    }
+                    else
+                    {
+                        data[pos + j] = HuesHelper.Color16To32(c16) | 0xFF_00_00_00;
+                    }
                 }
             }
 
@@ -95,6 +103,21 @@ namespace ClassicUO.Assets
                 Width = size,
                 Height = size
             };
+        }
+
+        public bool TryGetTexmapSize(uint idx, out int width, out int height)
+        {
+            ref UOFileIndex entry = ref _file.GetValidRefEntry((int)idx);
+
+            if (entry.Length <= 0)
+            {
+                width = 0;
+                height = 0;
+                return false;
+            }
+
+            width = height = entry.Length == 0x2000 ? 64 : 128;
+            return true;
         }
     }
 

@@ -570,12 +570,25 @@ namespace ClassicUO.Game.UI.Gumps
                 {
                     Add
                     (
-                        new Button((int) ButtonType.BuffIcon, 0x7538, 0x7539, 0x7539)
+                        new Button((int) ButtonType.BuffIcon, 0x837, 0x838, 0x838)
                         {
-                            X = 40,
-                            Y = 50,
+                            X = 28,
+                            Y = 45,
                             ButtonAction = ButtonAction.Activate
                         }
+                    );
+
+                    Add
+                    (
+                        new Label
+                        (
+                            ResGumps.Buffs,
+                            false,
+                            0,
+                            60,
+                            3
+                        )
+                        { X = 45, Y = 38 }
                     );
                 }
 

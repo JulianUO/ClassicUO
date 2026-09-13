@@ -1,6 +1,7 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
 using ClassicUO.Assets;
+using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Map;
@@ -279,6 +280,12 @@ namespace ClassicUO.Game.UI.Gumps
                     if (blockIndex >= maxBlockIndex)
                     {
                         break;
+                    }
+
+                    if ((ProfileManager.CurrentProfile?.EnableFogOfWar == true || UltimaLive.UltimaLiveActive)
+                        && !Managers.FogOfWarManager.Instance.IsBlockDiscovered(World.MapIndex, blockIndex))
+                    {
+                        continue;
                     }
 
                     ref var indexMap = ref World.Map.GetIndex(i, j);

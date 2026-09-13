@@ -1,7 +1,6 @@
 ﻿// SPDX-License-Identifier: BSD-2-Clause
 
 using System;
-using ClassicUO.Utility;
 
 namespace ClassicUO.Game.Data
 {
@@ -30,9 +29,9 @@ namespace ClassicUO.Game.Data
     {
         public CharacterListFlags Flags { get; private set; }
 
-        public bool TooltipsEnabled { get; private set; } = true;
-        public bool PopupEnabled { get; private set; }
-        public bool PaperdollBooks { get; private set; }
+        public bool TooltipsEnabled { get; private set; } = false;
+        public bool PopupEnabled { get; private set; } = true;
+        public bool PaperdollBooks { get; private set; } = true;
         public uint MaxChars { get; private set; } = 5;
 
         public void SetFlags(CharacterListFlags flags)
@@ -51,12 +50,6 @@ namespace ClassicUO.Game.Data
             {
                 MaxChars = 6;
             }
-
-            PopupEnabled = (flags & CharacterListFlags.CLF_CONTEXT_MENU) != 0;
-
-            TooltipsEnabled = (flags & CharacterListFlags.CLF_PALADIN_NECROMANCER_TOOLTIPS) != 0 && Client.Game.UO.Version >= ClientVersion.CV_308Z;
-
-            PaperdollBooks = (flags & CharacterListFlags.CLF_PALADIN_NECROMANCER_TOOLTIPS) != 0;
         }
     }
 }

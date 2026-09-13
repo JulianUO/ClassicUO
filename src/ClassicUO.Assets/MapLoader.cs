@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
 using ClassicUO.IO;
 using ClassicUO.Utility;
@@ -75,6 +75,8 @@ namespace ClassicUO.Assets
         {
             return map < _currentStaticsFiles.Length ? _currentStaticsFiles[map] : null;
         }
+
+
 
         protected void Initialize()
         {

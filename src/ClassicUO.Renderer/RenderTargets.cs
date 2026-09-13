@@ -21,10 +21,14 @@ namespace ClassicUO.Renderer
 
         private Texture2D _background;
         private SamplerState _defaultSamplerState;
+        private XBREffect _xbrEffect;
+        private CRTEffect _crtEffect;
+        private int _worldFilterType;
 
         public RenderTarget2D UiRenderTarget { get => _uiRenderTarget; }
         public RenderTarget2D LightRenderTarget { get => _lightRenderTarget; }
         public RenderTarget2D WorldRenderTarget { get => _worldRenderTarget; }
+        public float WorldRenderScale { get; private set; } = 1f;
 
         public void SetLightsConfiguration(Func<BlendState> lightsBlendState, Func<Vector3> lightsHue)
         {
@@ -32,25 +36,33 @@ namespace ClassicUO.Renderer
             _lightsHue = lightsHue;
         }
 
-        public void EnsureSizes(GraphicsDevice graphicsDevice, Rectangle gameWindowOnScreen, Rectangle gameWorldSceneAfterDPI, float dpiScale)
+        public void EnsureSizes(GraphicsDevice graphicsDevice, Rectangle gameWindowOnScreen, Rectangle gameWorldSceneAfterDPI, float dpiScale, float worldRenderScale = 1f, int worldFilterType = 0)
         {
             _gameWindowOnScreen = gameWindowOnScreen;
             _gameWindowAfterDPI = ScaleRectangle(gameWindowOnScreen, dpiScale);
             _gameWorldSceneOnScreen = ScaleRectangle(gameWorldSceneAfterDPI, 1/dpiScale);
             _gameWorldSceneAfterDPI = gameWorldSceneAfterDPI;
+            WorldRenderScale = worldRenderScale < 1f ? 1f : worldRenderScale;
+            _worldFilterType = worldFilterType;
 
             EnsureSize(graphicsDevice, ref _uiRenderTarget, _gameWindowAfterDPI.Width, _gameWindowAfterDPI.Height);
-            EnsureSize(graphicsDevice, ref _lightRenderTarget, _gameWorldSceneAfterDPI.Width, _gameWorldSceneAfterDPI.Height);
-            EnsureSize(graphicsDevice, ref _worldRenderTarget, _gameWorldSceneAfterDPI.Width, _gameWorldSceneAfterDPI.Height);
 
-            if (dpiScale == Math.Floor(dpiScale))
+            int worldWidth = Math.Max(1, (int)(_gameWorldSceneAfterDPI.Width * WorldRenderScale));
+            int worldHeight = Math.Max(1, (int)(_gameWorldSceneAfterDPI.Height * WorldRenderScale));
+            EnsureSize(graphicsDevice, ref _lightRenderTarget, worldWidth, worldHeight);
+            EnsureSize(graphicsDevice, ref _worldRenderTarget, worldWidth, worldHeight);
+
+            // CRT and Linear present softly; Point stays crisp; SSAA downsample uses Linear.
+            if (worldFilterType == 1 || worldFilterType == 3 || WorldRenderScale > 1f)
             {
-                // Use PointClamp for integer DPI scaling to avoid blurriness
+                _defaultSamplerState = SamplerState.LinearClamp;
+            }
+            else if (dpiScale == Math.Floor(dpiScale))
+            {
                 _defaultSamplerState = SamplerState.PointClamp;
             }
             else
             {
-                // Use LinearClamp for non-integer DPI scaling for smoother results
                 _defaultSamplerState = SamplerState.LinearClamp;
             }
         }
@@ -93,7 +105,6 @@ namespace ClassicUO.Renderer
 
         public void Draw(UltimaBatcher2D batcher)
         {
-            // draw world
             Vector3 fullAlphaNoColor = Vector3.UnitZ;
 
             batcher.Begin();
@@ -112,37 +123,70 @@ namespace ClassicUO.Renderer
                 new Vector3(0, 0, 0.1f),
                 0f
             );
+            batcher.End();
 
+            Effect worldEffect = null;
+            SamplerState worldSampler = _defaultSamplerState;
+
+            if (WorldRenderTarget != null)
+            {
+                if (_worldFilterType == 2)
+                {
+                    _xbrEffect ??= new XBREffect(batcher.GraphicsDevice);
+                    _xbrEffect.TextureSize.SetValue(new Vector2(WorldRenderTarget.Width, WorldRenderTarget.Height));
+                    worldEffect = _xbrEffect;
+                    worldSampler = SamplerState.PointClamp;
+                }
+                else if (_worldFilterType == 3)
+                {
+                    _crtEffect ??= new CRTEffect(batcher.GraphicsDevice);
+                    _crtEffect.TextureSize.SetValue(new Vector2(WorldRenderTarget.Width, WorldRenderTarget.Height));
+                    _crtEffect.ScanlineIntensity?.SetValue(0.65f);
+                    _crtEffect.Softness?.SetValue(1f);
+                    worldEffect = _crtEffect;
+                    worldSampler = SamplerState.LinearClamp;
+                }
+            }
+
+            batcher.Begin(worldEffect);
+            batcher.SetSampler(worldSampler);
+
+            if (WorldRenderTarget != null)
+            {
+                batcher.Draw(
+                    WorldRenderTarget,
+                    _gameWorldSceneOnScreen,
+                    fullAlphaNoColor,
+                    0f
+                );
+            }
+
+            batcher.End();
+
+            batcher.Begin();
             batcher.SetSampler(_defaultSamplerState);
 
-            batcher.Draw(
-                WorldRenderTarget,
-                _gameWorldSceneOnScreen,
-                fullAlphaNoColor,
-                0f
-            );
+            if (LightRenderTarget != null)
+            {
+                batcher.SetBlendState(_lightsBlendState?.Invoke());
 
-            // draw lights
-            batcher.SetBlendState(_lightsBlendState?.Invoke());
+                batcher.Draw(
+                    LightRenderTarget,
+                    _gameWorldSceneOnScreen,
+                    _lightsHue?.Invoke() ?? Vector3.Up,
+                    0f
+                );
 
-            batcher.Draw(
-                LightRenderTarget,
-                _gameWorldSceneOnScreen,
-                _lightsHue?.Invoke() ?? Vector3.Up,
-                0f
-            );
+                batcher.SetBlendState(null);
+            }
 
-            batcher.SetBlendState(null);
-
-            // Draw UI at original window size (render target is DPI-scaled but destination is not)
             batcher.Draw(
                 UiRenderTarget,
                 _gameWindowOnScreen,
                 fullAlphaNoColor,
                 0f
             );
-            
-            // Reset sampler to default
+
             batcher.SetSampler(null);
             batcher.End();
         }

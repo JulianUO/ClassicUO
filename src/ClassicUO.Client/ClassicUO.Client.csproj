@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -78,6 +78,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="$(ProjectDir)..\..\Data\Client\Fonts\**\*.*" CopyToOutputDirectory="PreserveNewest" Link="Data\Client\Fonts\%(RecursiveDir)%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(ProjectDir)Resources\Fonts\Avatar.ttf" LogicalName="Avatar.ttf" />
+    <EmbeddedResource Include="$(ProjectDir)Resources\Fonts\CLF-UoClassic.ttf" LogicalName="CLF-UoClassic.ttf" />
     <Reference Include="cuoapi">
       <HintPath>..\..\external\cuoapi\cuoapi.dll</HintPath>
     </Reference>

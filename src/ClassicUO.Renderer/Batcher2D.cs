@@ -249,7 +249,11 @@ namespace ClassicUO.Renderer
             ref Vector3 normalLeft,
             ref Vector3 normalBottom,
             Vector3 hue,
-            float depth
+            float depth,
+            float alphaTop = 1f,
+            float alphaRight = 1f,
+            float alphaLeft = 1f,
+            float alphaBottom = 1f
         )
         {
             EnsureSize();
@@ -300,15 +304,22 @@ namespace ClassicUO.Renderer
             vertex.Position2.Z = depth;
             vertex.Position3.Z = depth;
 
-            vertex.Hue0 = vertex.Hue1 = vertex.Hue2 = vertex.Hue3 = hue;
+            vertex.Hue0 = hue;
+            vertex.Hue1 = hue;
+            vertex.Hue2 = hue;
+            vertex.Hue3 = hue;
+            vertex.Hue0.Z *= alphaTop;
+            vertex.Hue1.Z *= alphaRight;
+            vertex.Hue2.Z *= alphaLeft;
+            vertex.Hue3.Z *= alphaBottom;
 
             PushSprite(texture);
         }
 
-        public void DrawShadow(Texture2D texture, Vector2 position, Rectangle sourceRect, bool flip, float depth)
+        public void DrawShadow(Texture2D texture, Vector2 position, Rectangle sourceRect, bool flip, float depth, int destWidth = 0, int destHeight = 0)
         {
-            float width = sourceRect.Width;
-            float height = sourceRect.Height * 0.5f;
+            float width = destWidth > 0 ? destWidth : sourceRect.Width;
+            float height = (destHeight > 0 ? destHeight : sourceRect.Height) * 0.5f;
             float translatedY = position.Y + height - 10;
             float ratio = height / width;
 
@@ -1274,6 +1285,11 @@ namespace ClassicUO.Renderer
             _basicUOEffect.Viewport.SetValue(new Vector2(GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height));
             _basicUOEffect.MatrixTransform.SetValue(matrix);
             _basicUOEffect.Pass.Apply();
+
+            if (_customEffect != null)
+            {
+                _customEffect.Parameters["MatrixTransform"]?.SetValue(matrix);
+            }
         }
 
         private void Flush()
@@ -1544,5 +1560,8 @@ namespace ClassicUO.Renderer
 
         [FileEmbed.FileEmbed("shaders/xBR.fxc")]
         public static partial ReadOnlySpan<byte> GetXBRShader();
+
+        [FileEmbed.FileEmbed("shaders/CRT.fxc")]
+        public static partial ReadOnlySpan<byte> GetCRTShader();
     }
 }

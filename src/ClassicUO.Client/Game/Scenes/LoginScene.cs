@@ -398,6 +398,7 @@ namespace ClassicUO.Game.Scenes
             if (CurrentLoginStep == LoginSteps.CharacterSelection)
             {
                 CurrentLoginStep = LoginSteps.CharacterCreation;
+                Client.Game.Audio.PlayMusic(1, false, true);
             }
         }
 
@@ -560,6 +561,11 @@ namespace ClassicUO.Game.Scenes
             }
 
             CurrentLoginStep = LoginSteps.ServerSelection;
+
+            if (Servers.Length == 1)
+            {
+                SelectServer((byte)Servers[0].Index);
+            }
 
             if (CanAutologin)
             {

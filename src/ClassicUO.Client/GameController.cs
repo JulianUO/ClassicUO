@@ -467,7 +467,9 @@ namespace ClassicUO
                 GraphicsDevice,
                 new Rectangle(0, 0, GraphicManager.PreferredBackBufferWidth, GraphicManager.PreferredBackBufferHeight),
                 Scene.Camera.Bounds,
-                DpiScale
+                DpiScale,
+                ProfileManager.CurrentProfile is { UseSsaa: true } ? 2f : 1f,
+                ProfileManager.CurrentProfile?.WorldFilterType ?? 0
             );
 
             Profiler.EndFrame();

@@ -242,9 +242,48 @@ namespace ClassicUO.Configuration
         public bool AuraOnMouse { get; set; } = true;
         public bool AnimatedWaterEffect { get; set; } = false;
 
+        // fog of war (UltimaLive only)
+        /// <summary>
+        /// Enables the Fog of War overlay when connected to an UltimaLive server.
+        /// Undiscovered map blocks appear dark until the server sends terrain/statics updates.
+        /// Has no effect on non-UltimaLive shards.
+        /// </summary>
+        public bool EnableFogOfWar { get; set; } = true;
+
+        /// <summary>
+        /// Enables animated mist/cloud sprites near the fog boundary.
+        /// Requires <see cref="EnableFogOfWar"/> to be active.
+        /// </summary>
+        public bool EnableFogMistEffect { get; set; } = true;
+
+        /// <summary>Density of the mist particles (0.0 = none, 1.0 = maximum).</summary>
+        public float FogMistDensity { get; set; } = 0.6f;
+
+        /// <summary>
+        /// Number of chunks used for the soft gradient transition at the fog boundary.
+        /// 0 = hard edge, 1-3 = progressively softer.
+        /// </summary>
+        public int FogBorderSmoothBlocks { get; set; } = 2;
+
         public bool PartyAura { get; set; }
 
         public bool UseXBR { get; set; } = true;
+
+        /// <summary>
+        /// Render the world at 2x and downsample (SSAA).
+        /// </summary>
+        public bool UseSsaa { get; set; }
+
+        /// <summary>
+        /// How the world render target is presented: 0 = Point, 1 = Linear, 2 = xBR.
+        /// </summary>
+        public int WorldFilterType { get; set; }
+
+        /// <summary>
+        /// Use texmaps on flat land, linear filtering on terrain, and blend neighboring land types.
+        /// Wet / water tiles are excluded from forced texmaps and edge blends.
+        /// </summary>
+        public bool SmoothTerrain { get; set; } = true;
 
         public bool HideChatGradient { get; set; } = false;
 

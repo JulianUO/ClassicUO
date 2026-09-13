@@ -44,6 +44,20 @@ namespace ClassicUO.Renderer
 
             while (!_packer.PackRect(width, height, out pr))
             {
+                if (width > _width || height > _height)
+                {
+                    Texture2D standalone = new Texture2D(_device, width, height, false, _format);
+                    _textureList.Add(standalone);
+                    pr = new Rectangle(0, 0, width, height);
+
+                    fixed (uint* src = pixels)
+                    {
+                        standalone.SetDataPointerEXT(0, pr, (IntPtr)src, sizeof(uint) * width * height);
+                    }
+
+                    return standalone;
+                }
+
                 CreateNewTexture2D();
                 index = _textureList.Count - 1;
             }

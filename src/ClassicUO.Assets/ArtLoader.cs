@@ -221,6 +221,32 @@ namespace ClassicUO.Assets
                 Height = height
             };
         }
+
+        public bool TryGetArtSize(uint idx, out int width, out int height)
+        {
+            ref var entry = ref _file.GetValidRefEntry((int)idx);
+
+            if (entry.Length <= 0)
+            {
+                width = 0;
+                height = 0;
+                return false;
+            }
+
+            if (idx < 0x4000)
+            {
+                width = 44;
+                height = 44;
+                return true;
+            }
+
+            var file = entry.File ?? _file;
+            file.Seek(entry.Offset, SeekOrigin.Begin);
+            file.ReadUInt32();
+            width = file.ReadInt16();
+            height = file.ReadInt16();
+            return width > 0 && height > 0;
+        }
     }
 
     public ref struct ArtInfo

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: BSD-2-Clause
+using ClassicUO.Configuration;
 using ClassicUO.Game;
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Map;
 using ClassicUO.Renderer;
+using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -206,19 +208,34 @@ namespace ClassicUO.Game.Scenes
                 var mesh = chunk.Mesh;
                 if (mesh.Land.Count > 0)
                     mesh.Land.BuildVisibleIndices();
+                if (mesh.LandBlends.Count > 0)
+                    mesh.LandBlends.BuildVisibleIndices();
                 if (mesh.Statics.Count > 0)
                     mesh.Statics.BuildVisibleIndices();
             }
 
             // Draw chunk mesh land tiles from GPU buffers with per-frame visibility
+            bool smoothTerrain = ProfileManager.CurrentProfile?.SmoothTerrain == true;
+            if (smoothTerrain)
+                batcher.SetSampler(SamplerState.LinearClamp);
+
             batcher.SetWorldOffset(offsetX, offsetY);
             foreach (var chunk in visibleChunks)
                 result += DrawMeshLayer(batcher, chunk.Mesh.Land);
+
+            // Soft edge overlays: depth-test only so they don't punch holes while walking.
+            batcher.SetStencil(DepthStencilState.DepthRead);
+            foreach (var chunk in visibleChunks)
+                result += DrawMeshLayer(batcher, chunk.Mesh.LandBlends);
+            batcher.SetStencil(DepthStencilState.Default);
             batcher.ResetWorldOffset();
 
             // Draw excluded land tiles (animated water, etc.)
             result += DrawRenderList(batcher, _tiles, maxGroundZ);
             result += DrawRenderList(batcher, _stretchedTiles, maxGroundZ);
+
+            if (smoothTerrain)
+                batcher.SetSampler(SamplerState.PointClamp);
 
             // Draw chunk mesh statics from GPU buffers with per-frame visibility
             batcher.SetWorldOffset(offsetX, offsetY);

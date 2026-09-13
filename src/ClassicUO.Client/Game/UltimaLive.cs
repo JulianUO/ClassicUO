@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
 using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
@@ -41,6 +41,7 @@ namespace ClassicUO.Game
         //       values in index 2 and 3 is for the wrap size of map (virtual size), x and y
         private ushort[,] MapSizeWrapSize;
         public static bool UltimaLiveActive => _UL != null && !string.IsNullOrEmpty(_UL.ShardName);
+        public static string ShardPath => _UL?.ShardName;
         protected string RealShardName;
         protected string ShardName;
 
@@ -305,10 +306,41 @@ namespace ClassicUO.Game
 
                         UIManager.GetGump<MiniMapGump>()?.RequestUpdateContents();
 
+                        // Fog of War: mark this block as discovered.
+                        FogOfWarManager.Instance.MarkBlockDiscovered(mapId, block);
+
                         //UIManager.GetGump<WorldMapGump>()?.UpdateMap();
                         //instead of recalculating the CRC block 2 times, in case of terrain + statics update, we only set the actual block to ushort maxvalue, so it will be recalculated on next hash query
                         //also the server should always send FIRST the landdata packet, and only AFTER land the statics packet
-                        _UL.MapCRCs[mapId][block] = ushort.MaxValue;
+                    }
+
+                    break;
+                }
+
+                case 0x04: // Discovery snapshot from server (login / map load)
+                case 0x05: // Discovery block update from server (exploration)
+                {
+                    if (p.Length < 15)
+                    {
+                        return;
+                    }
+
+                    p.Seek(3);
+                    uint blockCount = p.ReadUInt32BE();
+                    p.Seek(14);
+                    int mapId = p.ReadUInt8();
+
+                    if (p.Length >= 15 + blockCount * 4)
+                    {
+                        p.Seek(15);
+                        for (int i = 0; i < blockCount; i++)
+                        {
+                            uint block = p.ReadUInt32BE();
+                            FogOfWarManager.Instance.MarkBlockDiscovered(mapId, (int)block);
+                        }
+
+                        UIManager.GetGump<MiniMapGump>()?.RequestUpdateContents();
+                        UIManager.GetGump<TopBarGump>()?.RequestRadarUpdate();
                     }
 
                     break;
@@ -397,6 +429,13 @@ namespace ClassicUO.Game
                             _UL._filesIdxStatics[validMaps[i]] = refs.Item2[validMaps[i]] as ULFileMul;
                             _UL._filesStatics[validMaps[i]] = refs.Item3[validMaps[i]] as ULFileMul;
                         }
+
+                        // Fog of War: now that map block sizes are known, initialise the manager
+                        // and load any persisted discovery state from the shard folder.
+                        FogOfWarManager.Instance.Initialise(
+                            _UL.ShardName,
+                            validMaps,
+                            mapLoader.MapBlocksSize);
                     }
 
                     break;
@@ -432,6 +471,20 @@ namespace ClassicUO.Game
                         ShardName = name,
                         RealShardName = split[split.Length - 1]
                     };
+
+                    // Fog of War: Initialise for the active shard
+                    if (Client.Game.UO.FileManager.Maps != null)
+                    {
+                        int mapCount = Client.Game.UO.FileManager.Maps.MapBlocksSize.GetLength(0);
+                        var validMaps = new List<int>(mapCount);
+                        for (int i = 0; i < mapCount; i++)
+                            validMaps.Add(i);
+
+                        FogOfWarManager.Instance.Initialise(
+                            name,
+                            validMaps,
+                            Client.Game.UO.FileManager.Maps.MapBlocksSize);
+                    }
 
                     //TODO: create shard directory, copy map and statics to that directory, use that files instead of the original ones
                     break;
@@ -533,6 +586,9 @@ namespace ClassicUO.Game
                 }
 
                 UIManager.GetGump<MiniMapGump>()?.RequestUpdateContents();
+
+                // Fog of War: mark this block as discovered.
+                FogOfWarManager.Instance.MarkBlockDiscovered(mapId, block);
 
                 //UIManager.GetGump<WorldMapGump>()?.UpdateMap();
             }
@@ -824,6 +880,7 @@ namespace ClassicUO.Game
             public void CheckForShardMapFile(int mapId)
             {
                 string oldMap = FileManager.GetUOFilePath($"map{mapId}.mul");
+                string uopPath = FileManager.GetUOFilePath($"map{mapId}LegacyMUL.uop");
                 string oldStaIdx = FileManager.GetUOFilePath($"staidx{mapId}.mul");
                 string oldStatics = FileManager.GetUOFilePath($"statics{mapId}.mul");
 
@@ -832,61 +889,81 @@ namespace ClassicUO.Game
                 string staIdxPath = Path.Combine(_UL.ShardName, $"staidx{mapId}.mul");
                 string staticsPath = Path.Combine(_UL.ShardName, $"statics{mapId}.mul");
 
-                if (!File.Exists(mapPath))
+                // Check if existing map file is a dummy blank 0x0244 map or missing
+                bool isBlankMap = false;
+                if (File.Exists(mapPath))
                 {
-                    var mapFile = GetMapFile(mapId);
-
-                    if (mapFile == null)
+                    try
                     {
-                        // if (!File.Exists(staticsPath) && File.Exists(oldStatics))
-                        // {
-                        //     CopyFile(oldStatics, staticsPath);
-                        // }
+                        using var fs = File.OpenRead(mapPath);
+                        if (fs.Length >= 6)
+                        {
+                            byte[] header = new byte[6];
+                            fs.Read(header, 0, 6);
+                            // 0x00, 0x00, 0x00, 0x00, 0x44, 0x02 indicates generated dummy 0x0244 blank map
+                            if (header[0] == 0 && header[1] == 0 && header[2] == 0 && header[3] == 0 && header[4] == 0x44 && header[5] == 0x02)
+                            {
+                                isBlankMap = true;
+                            }
+                        }
+                    }
+                    catch { }
+                }
 
-                        // if (!File.Exists(staIdxPath) && File.Exists(oldStaIdx))
-                        // {
-                        //     CopyFile(oldStaIdx, staIdxPath);
-                        // }
+                if (!File.Exists(mapPath) || new FileInfo(mapPath).Length == 0 || isBlankMap)
+                {
+                    if (File.Exists(uopPath))
+                    {
+                        var uop = new UOFileUop(uopPath, $"build/map{mapId}legacymul/{{0:D8}}.dat");
+                        uop.FillEntries();
 
+                        Log.Trace($"UltimaLive -> converting file:\t{mapPath} from {uop.FilePath}");
+
+                        using (FileStream stream = File.Create(mapPath))
+                        {
+                            for (int x = 0; x < uop.Entries.Length; x++)
+                            {
+                                if (uop.Entries[x].Length > 0 && uop.Entries[x].Offset > 0)
+                                {
+                                    uop.Seek(uop.Entries[x].Offset, SeekOrigin.Begin);
+                                    byte[] buffer = new byte[uop.Entries[x].Length];
+                                    uop.Read(buffer);
+                                    stream.Write(buffer, 0, buffer.Length);
+                                }
+                            }
+
+                            stream.Flush();
+                        }
+
+                        uop.Dispose();
+                    }
+                    else if (File.Exists(oldMap))
+                    {
+                        Log.Trace($"UltimaLive -> copying file:\t{mapPath} from {oldMap}");
+                        File.Copy(oldMap, mapPath, true);
+                    }
+                    else if (!File.Exists(mapPath))
+                    {
                         CreateNewPersistentMap(mapId, mapPath, staIdxPath, staticsPath);
                     }
-                    else
+                }
+
+                if (!File.Exists(staticsPath) || new FileInfo(staticsPath).Length == 0 || isBlankMap)
+                {
+                    if (File.Exists(oldStatics))
                     {
-                        if (mapFile is UOFileUop uop)
-                        {
-                            //Entries[mapId] = new UOFileIndex[uop.TotalEntriesCount];
-                            //uop.FillEntries(ref Entries[mapId]);
-
-                            //Log.Trace($"UltimaLive -> converting file:\t{mapPath} from {uop.FilePath}");
-
-                            //using (FileStream stream = File.Create(mapPath))
-                            //{
-                            //    var reader = uop.GetReader();
-                            //    for (int x = 0; x < Entries[mapId].Length; x++)
-                            //    {
-                            //        reader.Seek(Entries[mapId][x].Offset);
-
-                            //        stream.Write(reader.ReadArray(Entries[mapId][x].Length), 0, Entries[mapId][x].Length);
-                            //    }
-
-                            //    stream.Flush();
-                            //}
-                        }
-                        else
-                        {
-                            CopyFile(oldMap, mapPath);
-                        }
+                        Log.Trace($"UltimaLive -> copying file:\t{staticsPath} from {oldStatics}");
+                        File.Copy(oldStatics, staticsPath, true);
                     }
                 }
 
-                if (!File.Exists(staticsPath))
+                if (!File.Exists(staIdxPath) || new FileInfo(staIdxPath).Length == 0 || isBlankMap)
                 {
-                    CopyFile(oldStatics, staticsPath);
-                }
-
-                if (!File.Exists(staIdxPath))
-                {
-                    CopyFile(oldStaIdx, staIdxPath);
+                    if (File.Exists(oldStaIdx))
+                    {
+                        Log.Trace($"UltimaLive -> copying file:\t{staIdxPath} from {oldStaIdx}");
+                        File.Copy(oldStaIdx, staIdxPath, true);
+                    }
                 }
             }
 

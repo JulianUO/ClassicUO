@@ -2014,6 +2014,41 @@ namespace ClassicUO.Network
             writer.Dispose();
         }
 
+        public static void Send_ScreenSize(this NetClient socket, int width, int height)
+        {
+            const byte ID = 0xBF;
+
+            int length = socket.PacketsTable.GetPacketLength(ID);
+
+            var writer = new StackDataWriter(length < 0 ? 64 : length);
+
+            writer.WriteUInt8(ID);
+
+            if (length < 0)
+            {
+                writer.WriteZero(2);
+            }
+
+            writer.WriteUInt16BE(0x05); // Subcommand: ScreenSize report
+            writer.WriteUInt16BE(0x0000); // 2 bytes padding/reserved
+            writer.WriteUInt16BE((ushort)Math.Clamp(width, 0, ushort.MaxValue));
+            writer.WriteUInt16BE((ushort)Math.Clamp(height, 0, ushort.MaxValue));
+            writer.WriteUInt16BE(0x0000); // 2 bytes padding/reserved
+
+            if (length < 0)
+            {
+                writer.Seek(1, SeekOrigin.Begin);
+                writer.WriteUInt16BE((ushort)writer.BytesWritten);
+            }
+            else
+            {
+                writer.WriteZero(length - writer.BytesWritten);
+            }
+
+            socket.Send(writer.BufferWritten);
+            writer.Dispose();
+        }
+
         public static void Send_CloseStatusBarGump(this NetClient socket, uint serial)
         {
             const byte ID = 0xBF;

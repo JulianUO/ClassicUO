@@ -812,7 +812,7 @@ namespace ClassicUO.Game.Scenes
 
                         if (obj.AlphaHue != 0)
                         {
-                            mesh.Land.SetVisible(obj.MeshSpriteIndex, obj.AlphaHue);
+                            meshLand.MarkLandVisible(mesh.Land, mesh.LandBlends, obj.AlphaHue);
                             ApplyMeshHue(obj, mesh.Land);
                             TrySelectObject(obj, true);
                         }

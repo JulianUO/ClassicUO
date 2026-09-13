@@ -57,7 +57,7 @@ namespace ClassicUO.Game.UI.Controls
             AcceptMouseInput = true;
 
             ref readonly var gumpInfo = ref Client.Game.UO.Gumps.GetGump(
-                (uint)(_style == HSliderBarStyle.MetalWidgetRecessedBar ? 216 : 0x845)
+                (uint)(_style == HSliderBarStyle.MetalWidgetRecessedBar ? 1209 : 0x845)
             );
 
             Width = BarWidth;
@@ -146,10 +146,10 @@ namespace ClassicUO.Game.UI.Controls
 
                     if (_style == HSliderBarStyle.MetalWidgetRecessedBar)
                     {
-                        ref readonly var gumpInfo0 = ref Client.Game.UO.Gumps.GetGump(213);
-                        ref readonly var gumpInfo1 = ref Client.Game.UO.Gumps.GetGump(214);
-                        ref readonly var gumpInfo2 = ref Client.Game.UO.Gumps.GetGump(215);
-                        ref readonly var gumpInfo3 = ref Client.Game.UO.Gumps.GetGump(216);
+                        ref readonly var gumpInfo0 = ref Client.Game.UO.Gumps.GetGump(1802);
+                        ref readonly var gumpInfo1 = ref Client.Game.UO.Gumps.GetGump(1803);
+                        ref readonly var gumpInfo2 = ref Client.Game.UO.Gumps.GetGump(1804);
+                        ref readonly var gumpInfo3 = ref Client.Game.UO.Gumps.GetGump(1209);
 
                         batcher.Draw(gumpInfo0.Texture, new Vector2(x, y), gumpInfo0.UV, hueVector, layerDepth);
 
@@ -274,7 +274,7 @@ namespace ClassicUO.Game.UI.Controls
             int maxValue = MaxValue - MinValue;
 
             ref readonly var gumpInfo = ref Client.Game.UO.Gumps.GetGump(
-                (uint)(_style == HSliderBarStyle.MetalWidgetRecessedBar ? 216 : 0x845)
+                (uint)(_style == HSliderBarStyle.MetalWidgetRecessedBar ? 1209 : 0x845)
             );
 
             len -= gumpInfo.UV.Width;
@@ -299,7 +299,7 @@ namespace ClassicUO.Game.UI.Controls
             int length = BarWidth;
 
             ref readonly var gumpInfo = ref Client.Game.UO.Gumps.GetGump(
-                (uint)(_style == HSliderBarStyle.MetalWidgetRecessedBar ? 216 : 0x845)
+                (uint)(_style == HSliderBarStyle.MetalWidgetRecessedBar ? 1209 : 0x845)
             );
             length -= gumpInfo.UV.Width;
 

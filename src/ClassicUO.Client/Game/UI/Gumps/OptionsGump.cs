@@ -97,8 +97,10 @@ namespace ClassicUO.Game.UI.Gumps
                          _closeAllAnchoredGumpsWithRClick,
                          _chatAfterEnter,
                          _chatAdditionalButtonsCheckbox,
-                         _chatShiftEnterCheckbox,
-                         _enableCaveBorder;
+                          _chatShiftEnterCheckbox,
+                          _enableCaveBorder,
+                          _enableFogOfWar,
+                          _enableFogMistEffect;
         private Checkbox _holdShiftForContext, _holdShiftToSplitStack, _reduceFPSWhenInactive, _sallosEasyGrab, _partyInviteGump, _objectsFading, _textFading, _holdAltToMoveGumps;
         private Combobox _hpComboBox, _healtbarType, _fieldsType, _hpComboBoxShowWhen;
 
@@ -148,6 +150,8 @@ namespace ClassicUO.Game.UI.Gumps
         private Combobox _lightLevelType;
         private Checkbox _use_smooth_boat_movement;
         private HSliderBar _terrainShadowLevel;
+        private Combobox _antiAliasing, _worldFilter;
+        private Checkbox _smoothTerrain;
 
         private Checkbox _use_tooltip;
         private Checkbox _useStandardSkillsGump, _showMobileNameIncoming, _showCorpseNameIncoming;
@@ -159,17 +163,8 @@ namespace ClassicUO.Game.UI.Gumps
 
         public OptionsGump(World world) : base(world, 0, 0)
         {
-            Add
-            (
-                new AlphaBlendControl(0.95f)
-                {
-                    X = 1,
-                    Y = 1,
-                    Width = WIDTH - 2,
-                    Height = HEIGHT - 2,
-                    Hue = 999
-                }
-            );
+            Add(new ResizePic(0x06DB) { X = 0, Y = 0, Width = WIDTH, Height = HEIGHT });
+            Add(new ResizePic(0x06DB) { X = 0, Y = 0, Width = 160, Height = HEIGHT });
 
 
             int i = 0;
@@ -346,32 +341,10 @@ namespace ClassicUO.Game.UI.Gumps
                 }
             );
 
-            Add
-            (
-                new Line
-                (
-                    160,
-                    5,
-                    1,
-                    HEIGHT - 10,
-                    Color.Gray.PackedValue
-                )
-            );
-
             int offsetX = 60;
             int offsetY = 60;
 
-            Add
-            (
-                new Line
-                (
-                    160,
-                    405 + 35 + 1,
-                    WIDTH - 160,
-                    1,
-                    Color.Gray.PackedValue
-                )
-            );
+            Add(new ResizePic(0x06DB) { X = 160, Y = 405 + 35 + 1, Width = WIDTH - 160, Height = HEIGHT - 405 - 35 - 1 });
 
             Add
             (
@@ -445,10 +418,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -734,7 +707,7 @@ namespace ClassicUO.Game.UI.Gumps
                     mode,
                     startX,
                     startY,
-                    100
+                    135
                 ),
                 2
             );
@@ -1444,10 +1417,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -1564,10 +1537,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -1932,6 +1905,30 @@ namespace ClassicUO.Game.UI.Gumps
                 )
             );
 
+            section4.Add
+            (
+                _enableFogOfWar = AddCheckBox
+                (
+                    null,
+                    "Enable Fog of War",
+                    _currentProfile.EnableFogOfWar,
+                    startX,
+                    startY
+                )
+            );
+
+            section4.Add
+            (
+                _enableFogMistEffect = AddCheckBox
+                (
+                    null,
+                    "Enable Mist Effect",
+                    _currentProfile.EnableFogMistEffect,
+                    startX,
+                    startY
+                )
+            );
+
 
             SettingsSection section5 = AddSettingsSection(box, "Shadows");
             section5.Y = section4.Bounds.Bottom + 40;
@@ -1967,6 +1964,46 @@ namespace ClassicUO.Game.UI.Gumps
             section5.Add(AddLabel(null, ResGumps.TerrainShadowsLevel, startX, startY));
             section5.AddRight(_terrainShadowLevel = AddHSlider(null, Constants.MIN_TERRAIN_SHADOWS_LEVEL, Constants.MAX_TERRAIN_SHADOWS_LEVEL, _currentProfile.TerrainShadowsLevel, startX, startY, 200));
 
+            SettingsSection section6 = AddSettingsSection(box, "Graphics");
+            section6.Y = section5.Bounds.Bottom + 40;
+
+            section6.Add(AddLabel(null, "Anti-aliasing", startX, startY));
+            section6.AddRight(
+                _antiAliasing = AddCombobox(
+                    null,
+                    new[] { ResGumps.OFF, "SSAA 2x" },
+                    _currentProfile.UseSsaa ? 1 : 0,
+                    startX,
+                    startY,
+                    150
+                )
+            );
+
+            section6.Add(AddLabel(null, "World filter", startX, startY));
+            int filterIndex = _currentProfile.WorldFilterType;
+            if (filterIndex < 0 || filterIndex > 3)
+                filterIndex = 0;
+            section6.AddRight(
+                _worldFilter = AddCombobox(
+                    null,
+                    new[] { "Point", ResGumps.LinearClamp, ResGumps.UseXBREffectBETA, "CRT (1998)" },
+                    filterIndex,
+                    startX,
+                    startY,
+                    150
+                )
+            );
+
+            section6.Add(
+                _smoothTerrain = AddCheckBox(
+                    null,
+                    "Smooth terrain transitions",
+                    _currentProfile.SmoothTerrain,
+                    startX,
+                    startY
+                )
+            );
+
             Add(rightArea, PAGE);
         }
 
@@ -1977,10 +2014,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
-                52 + 25 + 4,
-                150,
-                360,
+                170,
+                20,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -2264,10 +2301,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -2372,10 +2409,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -2441,10 +2478,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -2774,10 +2811,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -3026,10 +3063,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -3151,10 +3188,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -3227,10 +3264,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -3355,10 +3392,10 @@ namespace ClassicUO.Game.UI.Gumps
 
             ScrollArea rightArea = new ScrollArea
             (
-                190,
+                170,
                 20,
-                WIDTH - 210,
-                420,
+                WIDTH - 190,
+                410,
                 true
             );
 
@@ -3695,6 +3732,9 @@ namespace ClassicUO.Game.UI.Gumps
                     _enableShadows.IsChecked = true;
                     _enableShadowsStatics.IsChecked = true;
                     _terrainShadowLevel.Value = 15;
+                    _antiAliasing.SelectedIndex = 0;
+                    _worldFilter.SelectedIndex = 0;
+                    _smoothTerrain.IsChecked = true;
                     _runMouseInSeparateThread.IsChecked = true;
                     _auraMouse.IsChecked = true;
                     _partyAura.IsChecked = true;
@@ -4134,12 +4174,18 @@ namespace ClassicUO.Game.UI.Gumps
             _currentProfile.ShadowsEnabled = _enableShadows.IsChecked;
             _currentProfile.ShadowsStatics = _enableShadowsStatics.IsChecked;
             _currentProfile.TerrainShadowsLevel = _terrainShadowLevel.Value;
+            _currentProfile.UseSsaa = _antiAliasing.SelectedIndex == 1;
+            _currentProfile.WorldFilterType = _worldFilter.SelectedIndex;
+            _currentProfile.UseXBR = _worldFilter.SelectedIndex == 2;
+            _currentProfile.SmoothTerrain = _smoothTerrain.IsChecked;
             _currentProfile.AuraUnderFeetType = _auraType.SelectedIndex;
 
             Client.Game.IsMouseVisible = Settings.GlobalSettings.RunMouseInASeparateThread = _runMouseInSeparateThread.IsChecked;
 
             _currentProfile.AuraOnMouse = _auraMouse.IsChecked;
             _currentProfile.AnimatedWaterEffect = _animatedWaterEffect.IsChecked;
+            _currentProfile.EnableFogOfWar = _enableFogOfWar.IsChecked;
+            _currentProfile.EnableFogMistEffect = _enableFogMistEffect.IsChecked;
             _currentProfile.PartyAura = _partyAura.IsChecked;
             _currentProfile.PartyAuraHue = _partyAuraColorPickerBox.Hue;
             _currentProfile.HideChatGradient = _hideChatGradient.IsChecked;

@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
 using System;
 using System.Runtime.CompilerServices;
@@ -7,6 +7,7 @@ using ClassicUO.Assets;
 using ClassicUO.Renderer;
 using ClassicUO.Utility;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace ClassicUO.Game.GameObjects
 {
@@ -36,6 +37,8 @@ namespace ClassicUO.Game.GameObjects
         public Vector3 NormalTop, NormalRight, NormalLeft, NormalBottom;
         public ushort OriginalGraphic;
         public UltimaBatcher2D.YOffsets YOffsets;
+        public int MeshBlend0 = -1, MeshBlend1 = -1, MeshBlend2 = -1, MeshBlend3 = -1;
+        public Vector4 MeshBlendAlpha0, MeshBlendAlpha1, MeshBlendAlpha2, MeshBlendAlpha3;
 
         private Land(World world) : base(world) { }
 
@@ -46,10 +49,21 @@ namespace ClassicUO.Game.GameObjects
             land.Graphic = graphic;
             land.OriginalGraphic = graphic;
             land.IsStretched = land.TileData.TexID == 0 && land.TileData.IsWet;
-            land.AllowedToDraw = graphic > 2;
+            land.AllowedToDraw = CheckAllowedToDraw(graphic, ref land.TileData);
             land.UpdateGraphicBySeason();
 
             return land;
+        }
+
+        private static bool CheckAllowedToDraw(ushort graphic, ref LandTiles tileData)
+        {
+            if (graphic <= 2)
+                return false;
+
+            if (!string.IsNullOrEmpty(tileData.Name) && tileData.Name.StartsWith("nodraw", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return true;
         }
 
         public override void Destroy()
@@ -66,7 +80,7 @@ namespace ClassicUO.Game.GameObjects
         public override void UpdateGraphicBySeason()
         {
             Graphic = SeasonManager.GetLandSeasonGraphic(World.Season, OriginalGraphic);
-            AllowedToDraw = Graphic > 2;
+            AllowedToDraw = CheckAllowedToDraw(Graphic, ref TileData);
         }
 
         public int CalculateCurrentAverageZ(int direction)
@@ -235,6 +249,134 @@ namespace ClassicUO.Game.GameObjects
             Vector3.Normalize(ref ret, out normal);
 
             return true;
+        }
+
+        public bool ShouldDrawTexmap(bool smoothTerrain)
+        {
+            if (TileData.TexID == 0)
+                return false;
+
+            // Wet tiles keep classic art diamonds; forcing texmaps on water causes seams and ghost quads.
+            if (TileData.IsWet)
+                return IsStretched;
+
+            if (IsStretched)
+                return true;
+
+            return smoothTerrain && Client.Game.UO.Texmaps.GetTexmap(TileData.TexID).Texture != null;
+        }
+
+        public void ResetMeshBlends()
+        {
+            MeshBlend0 = MeshBlend1 = MeshBlend2 = MeshBlend3 = -1;
+        }
+
+        public void MarkLandVisible(MeshLayer layer, MeshLayer blendLayer, byte alphaHue)
+        {
+            if (MeshSpriteIndex >= 0)
+                layer.SetVisible(MeshSpriteIndex, alphaHue);
+
+            MarkBlend(blendLayer, MeshBlend0, alphaHue, MeshBlendAlpha0);
+            MarkBlend(blendLayer, MeshBlend1, alphaHue, MeshBlendAlpha1);
+            MarkBlend(blendLayer, MeshBlend2, alphaHue, MeshBlendAlpha2);
+            MarkBlend(blendLayer, MeshBlend3, alphaHue, MeshBlendAlpha3);
+        }
+
+        private static void MarkBlend(MeshLayer layer, int index, byte alphaHue, Vector4 alpha)
+        {
+            if (layer == null || index < 0)
+                return;
+
+            layer.SetVisibleCorners(index, alphaHue, alpha.X, alpha.Y, alpha.Z, alpha.W);
+        }
+
+        public int CollectNeighborBlends(bool smoothTerrain, LandNeighborBlend[] buffer)
+        {
+            // Keep blends subtle and skip water / wet tiles entirely.
+            if (!smoothTerrain || buffer.Length == 0 || TileData.TexID == 0 || TileData.IsWet)
+                return 0;
+
+            ref readonly var selfTex = ref Client.Game.UO.Texmaps.GetTexmap(TileData.TexID);
+            if (selfTex.Texture == null)
+                return 0;
+
+            var map = World.Map;
+            if (map == null)
+                return 0;
+
+            // Edge weight ~0.22 keeps transitions soft without the wide muddy wash of 0.5.
+            const float e = 0.22f;
+            int count = 0;
+            TryAddBlend(map, X + 1, Y, TileData.TexID, 0f, e, 0f, e, buffer, ref count);
+            TryAddBlend(map, X, Y + 1, TileData.TexID, 0f, 0f, e, e, buffer, ref count);
+            TryAddBlend(map, X - 1, Y, TileData.TexID, e, 0f, e, 0f, buffer, ref count);
+            TryAddBlend(map, X, Y - 1, TileData.TexID, e, e, 0f, 0f, buffer, ref count);
+            return count;
+        }
+
+        private static void TryAddBlend(
+            Map.Map map,
+            int x,
+            int y,
+            ushort selfTexId,
+            float a0,
+            float a1,
+            float a2,
+            float a3,
+            LandNeighborBlend[] buffer,
+            ref int count)
+        {
+            if (count >= buffer.Length)
+                return;
+
+            Land neighbor = FindLand(map, x, y);
+            if (neighbor == null
+                || neighbor.TileData.TexID == 0
+                || neighbor.TileData.TexID == selfTexId
+                || neighbor.TileData.IsWet)
+            {
+                return;
+            }
+
+            ref readonly var tex = ref Client.Game.UO.Texmaps.GetTexmap(neighbor.TileData.TexID);
+            if (tex.Texture == null)
+                return;
+
+            buffer[count++] = new LandNeighborBlend(tex.Texture, tex.UV, a0, a1, a2, a3);
+        }
+
+        private static Land FindLand(Map.Map map, int x, int y)
+        {
+            GameObject obj = map.GetTile(x, y, false);
+            while (obj != null)
+            {
+                if (obj is Land land)
+                    return land;
+
+                obj = obj.TNext;
+            }
+
+            return null;
+        }
+    }
+
+    internal readonly struct LandNeighborBlend
+    {
+        public readonly Texture2D Texture;
+        public readonly Rectangle UV;
+        public readonly float A0;
+        public readonly float A1;
+        public readonly float A2;
+        public readonly float A3;
+
+        public LandNeighborBlend(Texture2D texture, Rectangle uv, float a0, float a1, float a2, float a3)
+        {
+            Texture = texture;
+            UV = uv;
+            A0 = a0;
+            A1 = a1;
+            A2 = a2;
+            A3 = a3;
         }
     }
 }

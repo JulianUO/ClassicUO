@@ -103,13 +103,18 @@ namespace ClassicUO.Game.Map
     internal sealed class ChunkMesh
     {
         public readonly MeshLayer Land = new();
+        public readonly MeshLayer LandBlends = new();
         public readonly MeshLayer Statics = new();
 
         public bool IsDirty = true;
+        public bool BuiltWithSmoothTerrain;
 
         private bool _animatedWaterEffect;
+        private bool _smoothTerrain;
         private TextureBucketTracker _landBuckets = new(16);
+        private TextureBucketTracker _blendBuckets = new(16);
         private TextureBucketTracker _staticsBuckets = new(32);
+        private readonly LandNeighborBlend[] _blendScratch = new LandNeighborBlend[4];
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void MarkDirtyIfNeeded(GameObject obj)
@@ -121,6 +126,7 @@ namespace ClassicUO.Game.Map
         public void Build(Chunk chunk, World world, GraphicsDevice graphicsDevice)
         {
             Land.Reset();
+            LandBlends.Reset();
             Statics.Reset();
             IsDirty = false;
 
@@ -129,9 +135,12 @@ namespace ClassicUO.Game.Map
                 return;
 
             _animatedWaterEffect = profile.AnimatedWaterEffect;
+            _smoothTerrain = profile.SmoothTerrain;
+            BuiltWithSmoothTerrain = _smoothTerrain;
 
             // Pass 1: count sprites per texture
             _landBuckets.Clear();
+            _blendBuckets.Clear();
             _staticsBuckets.Clear();
 
             for (int x = 0; x < 8; x++)
@@ -146,6 +155,7 @@ namespace ClassicUO.Game.Map
                         switch (obj)
                         {
                             case GameObjects.Land land:
+                                land.ResetMeshBlends();
                                 CountLand(land);
                                 break;
 
@@ -162,10 +172,13 @@ namespace ClassicUO.Game.Map
             }
 
             int landTotal = _landBuckets.ComputeOffsets();
+            int blendTotal = _blendBuckets.ComputeOffsets();
             int staticsTotal = _staticsBuckets.ComputeOffsets();
 
             Land.EnsureCapacity(landTotal);
             Land.Count = landTotal;
+            LandBlends.EnsureCapacity(blendTotal);
+            LandBlends.Count = blendTotal;
             Statics.EnsureCapacity(staticsTotal);
             Statics.Count = staticsTotal;
 
@@ -195,6 +208,7 @@ namespace ClassicUO.Game.Map
             }
 
             Land.UploadVertexBuffer(graphicsDevice);
+            LandBlends.UploadVertexBuffer(graphicsDevice);
             Statics.UploadVertexBuffer(graphicsDevice);
         }
 
@@ -202,6 +216,8 @@ namespace ClassicUO.Game.Map
         {
             Land.Reset();
             Land.Dispose();
+            LandBlends.Reset();
+            LandBlends.Dispose();
             Statics.Reset();
             Statics.Dispose();
             IsDirty = true;
@@ -213,8 +229,10 @@ namespace ClassicUO.Game.Map
         public void SoftClear()
         {
             Land.SoftReset();
+            LandBlends.SoftReset();
             Statics.SoftReset();
             _landBuckets.Clear();
+            _blendBuckets.Clear();
             _staticsBuckets.Clear();
             IsDirty = true;
         }
@@ -230,7 +248,7 @@ namespace ClassicUO.Game.Map
                 return;
 
             Texture2D texture;
-            if (land.IsStretched)
+            if (land.ShouldDrawTexmap(_smoothTerrain))
             {
                 ref readonly var texmapInfo = ref Client.Game.UO.Texmaps.GetTexmap(
                     Client.Game.UO.FileManager.TileData.LandData[land.Graphic].TexID
@@ -255,6 +273,10 @@ namespace ClassicUO.Game.Map
             }
 
             _landBuckets.Count(texture);
+
+            int blendCount = land.CollectNeighborBlends(_smoothTerrain, _blendScratch);
+            for (int i = 0; i < blendCount; i++)
+                _blendBuckets.Count(_blendScratch[i].Texture);
         }
 
         private void CountStatic(Static staticObj)
@@ -300,19 +322,21 @@ namespace ClassicUO.Game.Map
             if (_animatedWaterEffect && land.TileData.IsWet)
                 return;
 
+            bool useTexmap = land.ShouldDrawTexmap(_smoothTerrain);
+
             ushort hue = land.Hue;
             Vector3 hueVec;
             if (hue != 0)
             {
                 hueVec.X = hue - 1;
-                hueVec.Y = land.IsStretched
+                hueVec.Y = useTexmap
                     ? ShaderHueTranslator.SHADER_LAND_HUED
                     : ShaderHueTranslator.SHADER_HUED;
             }
             else
             {
                 hueVec.X = 0;
-                hueVec.Y = land.IsStretched
+                hueVec.Y = useTexmap
                     ? ShaderHueTranslator.SHADER_LAND
                     : ShaderHueTranslator.SHADER_NONE;
             }
@@ -322,7 +346,7 @@ namespace ClassicUO.Game.Map
             int baseX = (land.X - land.Y) * 22 - 22;
             int baseY = (land.X + land.Y) * 22 - (land.Z << 2) - 22;
 
-            if (land.IsStretched)
+            if (useTexmap)
             {
                 ref readonly var texmapInfo = ref Client.Game.UO.Texmaps.GetTexmap(
                     Client.Game.UO.FileManager.TileData.LandData[land.Graphic].TexID
@@ -347,30 +371,80 @@ namespace ClassicUO.Game.Map
                         depth
                     );
                     land.InChunkMesh = true;
-                }
-                else
-                {
-                    ref readonly var artInfo = ref Client.Game.UO.Arts.GetLand(land.Graphic);
-                    if (artInfo.Texture != null)
-                    {
-                        int idx = _landBuckets.GetNextIndex(artInfo.Texture);
-                        land.MeshSpriteIndex = idx;
-                        Land.WriteQuadAt(idx, artInfo.Texture, artInfo.UV,
-                            baseX, baseY + (land.Z << 2), hueVec, depth);
-                        land.InChunkMesh = true;
-                    }
+                    AddLandBlends(land, hueVec, baseX, baseY + (land.Z << 2), depth);
+                    return;
                 }
             }
-            else
+
+            ref readonly var artInfo = ref Client.Game.UO.Arts.GetLand(land.Graphic);
+            if (artInfo.Texture != null)
             {
-                ref readonly var artInfo = ref Client.Game.UO.Arts.GetLand(land.Graphic);
-                if (artInfo.Texture != null)
+                int idx = _landBuckets.GetNextIndex(artInfo.Texture);
+                land.MeshSpriteIndex = idx;
+                int destY = useTexmap ? baseY + (land.Z << 2) : baseY;
+                Land.WriteQuadAt(
+                    idx,
+                    artInfo.Texture,
+                    artInfo.UV,
+                    baseX,
+                    destY,
+                    hueVec,
+                    depth,
+                    0f,
+                    artInfo.DrawWidth,
+                    artInfo.DrawHeight
+                );
+                land.InChunkMesh = true;
+            }
+        }
+
+        private void AddLandBlends(GameObjects.Land land, Vector3 hueVec, int posX, int posY, float depth)
+        {
+            int blendCount = land.CollectNeighborBlends(_smoothTerrain, _blendScratch);
+
+            for (int i = 0; i < blendCount; i++)
+            {
+                ref readonly var blend = ref _blendScratch[i];
+                int idx = _blendBuckets.GetNextIndex(blend.Texture);
+                var alpha = new Vector4(blend.A0, blend.A1, blend.A2, blend.A3);
+                switch (i)
                 {
-                    int idx = _landBuckets.GetNextIndex(artInfo.Texture);
-                    land.MeshSpriteIndex = idx;
-                    Land.WriteQuadAt(idx, artInfo.Texture, artInfo.UV, baseX, baseY, hueVec, depth);
-                    land.InChunkMesh = true;
+                    case 0:
+                        land.MeshBlend0 = idx;
+                        land.MeshBlendAlpha0 = alpha;
+                        break;
+                    case 1:
+                        land.MeshBlend1 = idx;
+                        land.MeshBlendAlpha1 = alpha;
+                        break;
+                    case 2:
+                        land.MeshBlend2 = idx;
+                        land.MeshBlendAlpha2 = alpha;
+                        break;
+                    case 3:
+                        land.MeshBlend3 = idx;
+                        land.MeshBlendAlpha3 = alpha;
+                        break;
                 }
+
+                WriteStretchedLandBlend(
+                    idx,
+                    blend.Texture,
+                    blend.UV,
+                    posX,
+                    posY,
+                    ref land.YOffsets,
+                    ref land.NormalTop,
+                    ref land.NormalRight,
+                    ref land.NormalLeft,
+                    ref land.NormalBottom,
+                    hueVec,
+                    depth,
+                    blend.A0,
+                    blend.A1,
+                    blend.A2,
+                    blend.A3
+                );
             }
         }
 
@@ -432,15 +506,26 @@ namespace ClassicUO.Game.Map
                 return;
 
             ref var artIndex = ref Client.Game.UO.FileManager.Arts.File.GetValidRefEntry(graphic + 0x4000);
-            artIndex.Width = (short)((artInfo.UV.Width >> 1) - 22);
-            artIndex.Height = (short)(artInfo.UV.Height - 44);
+            artIndex.Width = (short)((artInfo.DrawWidth >> 1) - 22);
+            artIndex.Height = (short)(artInfo.DrawHeight - 44);
 
             int posX = baseX - artIndex.Width;
             int posY = baseY - artIndex.Height;
 
             int idx = _staticsBuckets.GetNextIndex(artInfo.Texture);
             obj.MeshSpriteIndex = idx;
-            Statics.WriteQuadAt(idx, artInfo.Texture, artInfo.UV, posX, posY, hueVec, depth);
+            Statics.WriteQuadAt(
+                idx,
+                artInfo.Texture,
+                artInfo.UV,
+                posX,
+                posY,
+                hueVec,
+                depth,
+                0f,
+                artInfo.DrawWidth,
+                artInfo.DrawHeight
+            );
             obj.InChunkMesh = true;
         }
 
@@ -451,9 +536,70 @@ namespace ClassicUO.Game.Map
             ref YOffsets yOffsets,
             ref Vector3 normalTop, ref Vector3 normalRight,
             ref Vector3 normalLeft, ref Vector3 normalBottom,
-            Vector3 hue, float depth)
+            Vector3 hue, float depth, float alphaTop = 1f, float alphaRight = 1f, float alphaLeft = 1f, float alphaBottom = 1f)
         {
-            ref var vertex = ref Land.Vertices[index];
+            WriteStretchedLandTo(
+                Land,
+                index,
+                texture,
+                sourceRect,
+                posX,
+                posY,
+                ref yOffsets,
+                ref normalTop,
+                ref normalRight,
+                ref normalLeft,
+                ref normalBottom,
+                hue,
+                depth,
+                alphaTop,
+                alphaRight,
+                alphaLeft,
+                alphaBottom
+            );
+        }
+
+        private void WriteStretchedLandBlend(
+            int index,
+            Texture2D texture, Rectangle sourceRect,
+            int posX, int posY,
+            ref YOffsets yOffsets,
+            ref Vector3 normalTop, ref Vector3 normalRight,
+            ref Vector3 normalLeft, ref Vector3 normalBottom,
+            Vector3 hue, float depth, float alphaTop, float alphaRight, float alphaLeft, float alphaBottom)
+        {
+            WriteStretchedLandTo(
+                LandBlends,
+                index,
+                texture,
+                sourceRect,
+                posX,
+                posY,
+                ref yOffsets,
+                ref normalTop,
+                ref normalRight,
+                ref normalLeft,
+                ref normalBottom,
+                hue,
+                depth,
+                alphaTop,
+                alphaRight,
+                alphaLeft,
+                alphaBottom
+            );
+        }
+
+        private static void WriteStretchedLandTo(
+            MeshLayer layer,
+            int index,
+            Texture2D texture, Rectangle sourceRect,
+            int posX, int posY,
+            ref YOffsets yOffsets,
+            ref Vector3 normalTop, ref Vector3 normalRight,
+            ref Vector3 normalLeft, ref Vector3 normalBottom,
+            Vector3 hue, float depth, float alphaTop, float alphaRight, float alphaLeft, float alphaBottom)
+        {
+            ref var vertex = ref layer.Vertices[index];
 
             // Half-pixel inset to prevent texture bleeding at tile seams
             float sourceX = (sourceRect.X + 0.5f) / (float)texture.Width;
@@ -490,9 +636,16 @@ namespace ClassicUO.Game.Map
 
             vertex.Position0.Z = vertex.Position1.Z = vertex.Position2.Z = vertex.Position3.Z = depth;
 
-            vertex.Hue0 = vertex.Hue1 = vertex.Hue2 = vertex.Hue3 = hue;
+            vertex.Hue0 = hue;
+            vertex.Hue1 = hue;
+            vertex.Hue2 = hue;
+            vertex.Hue3 = hue;
+            vertex.Hue0.Z *= alphaTop;
+            vertex.Hue1.Z *= alphaRight;
+            vertex.Hue2.Z *= alphaLeft;
+            vertex.Hue3.Z *= alphaBottom;
 
-            Land.Textures[index] = texture;
+            layer.Textures[index] = texture;
         }
 
         #endregion

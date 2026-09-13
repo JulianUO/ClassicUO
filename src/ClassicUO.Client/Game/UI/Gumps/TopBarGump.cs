@@ -1,5 +1,6 @@
-﻿// SPDX-License-Identifier: BSD-2-Clause
+// SPDX-License-Identifier: BSD-2-Clause
 
+using System;
 using System.Collections.Generic;
 using ClassicUO.Configuration;
 using ClassicUO.Game.Data;
@@ -7,9 +8,7 @@ using ClassicUO.Game.GameObjects;
 using ClassicUO.Game.Managers;
 using ClassicUO.Game.UI.Controls;
 using ClassicUO.Input;
-using ClassicUO.Assets;
 using ClassicUO.Network;
-using ClassicUO.Renderer;
 using ClassicUO.Resources;
 using ClassicUO.Utility;
 using ClassicUO.Utility.Logging;
@@ -19,134 +18,190 @@ namespace ClassicUO.Game.UI.Gumps
 {
     internal class TopBarGump : Gump
     {
+        private readonly ResizePic _background;
+        private readonly CurrentPlaceCartelControl _cartel;
+        private static string _savedPlaceName = "Britannia";
+
         private TopBarGump(World world) : base(world, 0, 0)
         {
-            CanMove = true;
+            CanMove = false;
             AcceptMouseInput = true;
             CanCloseWithRightClick = false;
+            LayerOrder = UILayer.Over;
+            WantUpdateSize = false;
 
-            // little
-            Add(new ResizePic(0x13BE) { Width = 30, Height = 27 }, 2);
+            X = 0;
+            Y = 0;
+            Width = Math.Max(Client.Game.ClientBounds.Width, 800);
+            Height = 40;
 
-            Add(
-                new Button(0, 0x15A1, 0x15A1, 0x15A1)
+            // Little / Minimized (Page 2)
+            Add
+            (
+                new ResizePic(1755)
                 {
-                    X = 5,
-                    Y = 3,
-                    ToPage = 1
+                    Width = 40, Height = 39
                 },
                 2
             );
 
-            // big
-            int smallWidth = 50;
-            ref readonly var gumpInfo = ref Client.Game.UO.Gumps.GetGump(0x098B);
-            if (gumpInfo.Texture != null)
-            {
-                smallWidth = gumpInfo.UV.Width;
-            }
-
-            int largeWidth = 100;
-
-            gumpInfo = ref Client.Game.UO.Gumps.GetGump(0x098D);
-            if (gumpInfo.Texture != null)
-            {
-                largeWidth = gumpInfo.UV.Width;
-            }
-
-            int[][] textTable =
-            {
-                new[] { 0, (int)Buttons.Map },
-                new[] { 1, (int)Buttons.Paperdoll },
-                new[] { 1, (int)Buttons.Inventory },
-                new[] { 1, (int)Buttons.Journal },
-                new[] { 0, (int)Buttons.Chat },
-                new[] { 0, (int)Buttons.Help },
-                new[] { 1, (int)Buttons.WorldMap },
-                new[] { 0, (int)Buttons.Info },
-                new[] { 0, (int)Buttons.Debug },
-                new[] { 1, (int)Buttons.NetStats },
-                new[] { 1, (int)Buttons.UOStore },
-                new[] { 1, (int)Buttons.GlobalChat }
-            };
-
-            var cliloc = Client.Game.UO.FileManager.Clilocs;
-
-            string[] texts =
-            {
-                cliloc.GetString(3000430, ResGumps.Map),
-                cliloc.GetString(3000133, ResGumps.Paperdoll),
-                cliloc.GetString(3000431, ResGumps.Inventory),
-                cliloc.GetString(3000129, ResGumps.Journal),
-                cliloc.GetString(3000131, ResGumps.Chat),
-                cliloc.GetString(3000134, ResGumps.Help),
-                StringHelper.CapitalizeAllWords(cliloc.GetString(1015233, ResGumps.WorldMap)),
-                cliloc.GetString(1079449, ResGumps.Info),
-                cliloc.GetString(1042237, ResGumps.Debug),
-                cliloc.GetString(3000169, ResGumps.NetStats),
-                cliloc.GetString(1158008, ResGumps.UOStore),
-                cliloc.GetString(1158390, ResGumps.GlobalChat)
-            };
-
-            bool hasUOStore = Client.Game.UO.Version >= ClientVersion.CV_706400;
-
-            ResizePic background;
-
-            Add(background = new ResizePic(0x13BE) { Height = 27 }, 1);
-
-            Add(
-                new Button(0, 0x15A4, 0x15A4, 0x15A4)
+            Add
+            (
+                new Button(0, 1531, 1532)
                 {
-                    X = 5,
-                    Y = 3,
-                    ToPage = 2
+                    X = 8, Y = 9, ToPage = 1
+                },
+                2
+            );
+
+            // Full Bar (Page 1)
+            Add
+            (
+                _background = new ResizePic(1755)
+                {
+                    Width = Width,
+                    Height = 39
                 },
                 1
             );
 
-            int startX = 30;
-
-            for (int i = 0; i < textTable.Length; i++)
-            {
-                if (!hasUOStore && i >= (int)Buttons.UOStore)
+            Add
+            (
+                new Button(0, 1531, 1532)
                 {
-                    break;
-                }
+                    ButtonAction = ButtonAction.SwitchPage, ToPage = 2, X = 8, Y = 9
+                },
+                1
+            );
 
-                ushort graphic = (ushort)(textTable[i][0] != 0 ? 0x098D : 0x098B);
+            Add
+            (
+                new Button((int)Buttons.Map, 1592, 1593, 0, "Radar", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 32, Y = 7, FontCenter = true
+                },
+                1
+            );
 
-                Add(
-                    new RighClickableButton(
-                        textTable[i][1],
-                        graphic,
-                        graphic,
-                        graphic,
-                        texts[i],
-                        1,
-                        true,
-                        0,
-                        0x0036
-                    )
-                    {
-                        ButtonAction = ButtonAction.Activate,
-                        X = startX,
-                        Y = 1,
-                        FontCenter = true
-                    },
-                    1
-                );
+            Add
+            (
+                new Button((int)Buttons.Paperdoll, 1588, 1589, 0, "Paperdoll", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 85, Y = 7, FontCenter = true
+                },
+                1
+            );
 
-                startX += (textTable[i][0] != 0 ? largeWidth : smallWidth) + 1;
-                background.Width = startX;
-            }
+            Add
+            (
+                new Button((int)Buttons.Inventory, 1588, 1589, 0, "Inventario", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 200, Y = 7, FontCenter = true
+                },
+                1
+            );
 
-            background.Width = startX + 1;
+            Add
+            (
+                new Button((int)Buttons.Journal, 1588, 1589, 0, "Journal", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 315, Y = 7, FontCenter = true
+                },
+                1
+            );
 
-            //layer
-            LayerOrder = UILayer.Over;
+            Add
+            (
+                new Button((int)Buttons.UOStore, 1588, 1589, 0, "Achievements", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 430, Y = 7, FontCenter = true
+                },
+                1
+            );
+
+            Add
+            (
+                new Button((int)Buttons.Chat, 1592, 1593, 0, "Chat", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 545, Y = 7, FontCenter = true
+                },
+                1
+            );
+
+            Add
+            (
+                new Button((int)Buttons.Help, 1592, 1593, 0, "Help", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 600, Y = 7, FontCenter = true
+                },
+                1
+            );
+
+            Add
+            (
+                new Button((int)Buttons.Debug, 1592, 1593, 0, "Debug", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 655, Y = 7, FontCenter = true
+                },
+                1
+            );
+
+            Add
+            (
+                new Button((int)Buttons.WorldMap, 1592, 1593, 0, "Mapa", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 710, Y = 7, FontCenter = true
+                },
+                1
+            );
+
+            Add
+            (
+                new Button((int)Buttons.Info, 1592, 1593, 0, "Info", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 765, Y = 7, FontCenter = true
+                },
+                1
+            );
+
+            Add
+            (
+                new Button((int)Buttons.NetStats, 1592, 1593, 0, "Lag", 1, true, 0x0386, 0)
+                {
+                    ButtonAction = ButtonAction.Activate, X = 820, Y = 7, FontCenter = true
+                },
+                1
+            );
+
+            // Right side: Current Place Cartel
+            _cartel = new CurrentPlaceCartelControl(_savedPlaceName);
+            Add(_cartel, 1);
+
+            UpdateLayout();
         }
 
         public bool IsMinimized { get; private set; }
+
+        public string CurrentPlace
+        {
+            get => _cartel.PlaceName;
+            set
+            {
+                _savedPlaceName = value;
+                _cartel.PlaceName = value;
+                UpdateLayout();
+            }
+        }
+
+        public static void SetCurrentPlace(World world, string placeName)
+        {
+            _savedPlaceName = placeName;
+            TopBarGump gump = UIManager.GetGump<TopBarGump>();
+            if (gump != null && !gump.IsDisposed)
+            {
+                gump.CurrentPlace = placeName;
+            }
+        }
 
         public static void Create(World world)
         {
@@ -154,54 +209,86 @@ namespace ClassicUO.Game.UI.Gumps
 
             if (gump == null)
             {
-                if (
-                    ProfileManager.CurrentProfile.TopbarGumpPosition.X < 0
-                    || ProfileManager.CurrentProfile.TopbarGumpPosition.Y < 0
-                )
-                {
-                    ProfileManager.CurrentProfile.TopbarGumpPosition = Point.Zero;
-                }
-
-                UIManager.Add(
-                    gump = new TopBarGump(world)
-                    {
-                        X = ProfileManager.CurrentProfile.TopbarGumpPosition.X,
-                        Y = ProfileManager.CurrentProfile.TopbarGumpPosition.Y
-                    }
-                );
+                UIManager.Add(gump = new TopBarGump(world));
 
                 if (ProfileManager.CurrentProfile.TopbarGumpIsMinimized)
                 {
                     gump.ChangePage(2);
                 }
             }
-            else
+
+            TopBarRadarGump radar = UIManager.GetGump<TopBarRadarGump>();
+            if (radar == null)
             {
-                Log.Error(ResGumps.TopBarGumpAlreadyExists);
+                UIManager.Add(radar = new TopBarRadarGump(world));
+                if (ProfileManager.CurrentProfile.TopbarGumpIsMinimized)
+                {
+                    radar.IsVisible = false;
+                }
             }
         }
 
-        protected override void OnMouseUp(int x, int y, MouseButtonType button)
+        public void ToggleRadar()
         {
-            if (button == MouseButtonType.Right && (X != 0 || Y != 0))
+            TopBarRadarGump radar = UIManager.GetGump<TopBarRadarGump>();
+            if (radar == null || radar.IsDisposed)
             {
-                X = 0;
-                Y = 0;
+                UIManager.Add(new TopBarRadarGump(World));
+            }
+            else
+            {
+                radar.IsVisible = !radar.IsVisible;
+            }
+        }
 
-                ProfileManager.CurrentProfile.TopbarGumpPosition = Location;
+        private void UpdateLayout()
+        {
+            int screenWidth = Client.Game.ClientBounds.Width;
+            if (screenWidth <= 0)
+                screenWidth = 800;
+
+            Width = screenWidth;
+            Height = 40;
+            X = 0;
+            Y = 0;
+
+            if (_background != null)
+            {
+                _background.Width = screenWidth;
+            }
+
+            if (_cartel != null)
+            {
+                int radarLeft = screenWidth - TopBarRadarGump.RADAR_WIDTH;
+                _cartel.X = radarLeft - _cartel.Width - 6;
+                _cartel.Y = 7;
+            }
+        }
+
+        public override void Update()
+        {
+            base.Update();
+
+            if (IsDisposed)
+                return;
+
+            int screenWidth = Client.Game.ClientBounds.Width;
+            if (Width != screenWidth || X != 0 || Y != 0)
+            {
+                UpdateLayout();
             }
         }
 
         public override void OnPageChanged()
         {
             ProfileManager.CurrentProfile.TopbarGumpIsMinimized = IsMinimized = ActivePage == 2;
-            WantUpdateSize = true;
-        }
+            WantUpdateSize = false;
 
-        protected override void OnDragEnd(int x, int y)
-        {
-            base.OnDragEnd(x, y);
-            ProfileManager.CurrentProfile.TopbarGumpPosition = Location;
+            TopBarRadarGump radar = UIManager.GetGump<TopBarRadarGump>();
+            if (radar != null && !radar.IsDisposed)
+            {
+                radar.IsVisible = !IsMinimized;
+            }
         }
 
         public override void OnButtonClick(int buttonID)
@@ -209,39 +296,32 @@ namespace ClassicUO.Game.UI.Gumps
             switch ((Buttons)buttonID)
             {
                 case Buttons.Map:
-                    GameActions.OpenMiniMap(World);
-
+                    ToggleRadar();
                     break;
 
                 case Buttons.Paperdoll:
                     GameActions.OpenPaperdoll(World, World.Player);
-
                     break;
 
                 case Buttons.Inventory:
                     GameActions.OpenBackpack(World);
-
                     break;
 
                 case Buttons.Journal:
                     GameActions.OpenJournal(World);
-
                     break;
 
                 case Buttons.Chat:
                     GameActions.OpenChat(World);
-
                     break;
 
                 case Buttons.GlobalChat:
-                    Log.Warn(ResGumps.ChatButtonPushedNotImplementedYet);
                     GameActions.Print(
                         World,
                         ResGumps.GlobalChatNotImplementedYet,
                         0x23,
                         MessageType.System
                     );
-
                     break;
 
                 case Buttons.UOStore:
@@ -249,18 +329,14 @@ namespace ClassicUO.Game.UI.Gumps
                     {
                         NetClient.Socket.Send_OpenUOStore();
                     }
-
                     break;
 
                 case Buttons.Help:
                     GameActions.RequestHelp();
-
                     break;
 
                 case Buttons.Debug:
-
                     DebugGump debugGump = UIManager.GetGump<DebugGump>();
-
                     if (debugGump == null)
                     {
                         debugGump = new DebugGump(World, 100, 100);
@@ -271,12 +347,10 @@ namespace ClassicUO.Game.UI.Gumps
                         debugGump.IsVisible = !debugGump.IsVisible;
                         debugGump.SetInScreen();
                     }
-
                     break;
 
                 case Buttons.NetStats:
                     NetworkStatsGump netstatsgump = UIManager.GetGump<NetworkStatsGump>();
-
                     if (netstatsgump == null)
                     {
                         netstatsgump = new NetworkStatsGump(World, 100, 100);
@@ -287,14 +361,23 @@ namespace ClassicUO.Game.UI.Gumps
                         netstatsgump.IsVisible = !netstatsgump.IsVisible;
                         netstatsgump.SetInScreen();
                     }
-
                     break;
 
                 case Buttons.WorldMap:
                     GameActions.OpenWorldMap(World);
-
                     break;
             }
+        }
+
+        public void RequestRadarUpdate()
+        {
+            UIManager.GetGump<TopBarRadarGump>()?.ForceUpdateMap();
+        }
+
+        public override void Dispose()
+        {
+            UIManager.GetGump<TopBarRadarGump>()?.Dispose();
+            base.Dispose();
         }
 
         private enum Buttons
@@ -311,30 +394,6 @@ namespace ClassicUO.Game.UI.Gumps
             NetStats,
             UOStore,
             GlobalChat
-        }
-
-        private class RighClickableButton : Button
-        {
-            public RighClickableButton(
-                int buttonID,
-                ushort normal,
-                ushort pressed,
-                ushort over = 0,
-                string caption = "",
-                byte font = 0,
-                bool isunicode = true,
-                ushort normalHue = ushort.MaxValue,
-                ushort hoverHue = ushort.MaxValue
-            ) : base(buttonID, normal, pressed, over, caption, font, isunicode, normalHue, hoverHue)
-            { }
-
-            public RighClickableButton(List<string> parts) : base(parts) { }
-
-            protected override void OnMouseUp(int x, int y, MouseButtonType button)
-            {
-                base.OnMouseUp(x, y, button);
-                Parent?.InvokeMouseUp(new Point(x, y), button);
-            }
         }
     }
 }

@@ -11,17 +11,23 @@
 *.userprefs
 
 # Build results
-[Dd]ebug/
-[Dd]ebugPublic/
-[Rr]elease/
-[Rr]eleases/
-bld/
-[Bb]in/
-[Oo]bj/
-[Ll]og/
+**/[Dd]ebug/
+**/[Dd]ebugPublic/
+**/[Rr]elease/
+**/[Rr]eleases/
+**/bld/
+**/[Bb]in/
+**/[Oo]bj/
+**/[Ll]og/
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
+**/out/
+**/artifacts/
 
 # Visual Studio Code
-.vscode/
+**/.vscode/
 
 # Visual Studio 2015 cache/options directory
 .vs/
@@ -265,3 +271,5 @@ __pycache__/
 *.pyc
 /.svn
 Data
+.cursor/
+.cache/

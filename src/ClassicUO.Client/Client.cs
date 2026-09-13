@@ -81,6 +81,12 @@ namespace ClassicUO
             game.GraphicsDevice.Textures[1] = hueSamplers[0];
             game.GraphicsDevice.Textures[2] = hueSamplers[1];
 
+            ClassicUO.Renderer.CustomArtOverride.Initialize(
+                game.GraphicsDevice,
+                Path.Combine(CUOEnviroment.ExecutablePath, "Data", "Client", "CustomArt"),
+                Path.Combine(ClientPath ?? string.Empty, "CustomArt")
+            );
+
             Animations = new Renderer.Animations.Animations(FileManager.Animations, game.GraphicsDevice);
             Arts = new Renderer.Arts.Art(FileManager.Arts, FileManager.Hues, game.GraphicsDevice);
             Gumps = new Renderer.Gumps.Gump(FileManager.Gumps, game.GraphicsDevice);

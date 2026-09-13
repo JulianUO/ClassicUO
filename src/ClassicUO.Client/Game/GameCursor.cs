@@ -180,8 +180,8 @@ namespace ClassicUO.Game
             }
 
             return new Point(
-                (int)((artInfo.UV.Width >> 1) * scale) - ItemHold.MouseOffset.X,
-                (int)((artInfo.UV.Height >> 1) * scale) - ItemHold.MouseOffset.Y
+                (int)((artInfo.DrawWidth >> 1) * scale) - ItemHold.MouseOffset.X,
+                (int)((artInfo.DrawHeight >> 1) * scale) - ItemHold.MouseOffset.Y
             );
         }
 
@@ -241,9 +241,9 @@ namespace ClassicUO.Game
 
             if (
                 Mouse.Position.X >= x
-                && Mouse.Position.X < x + artInfo.UV.Width
+                && Mouse.Position.X < x + artInfo.DrawWidth
                 && Mouse.Position.Y >= y
-                && Mouse.Position.Y < y + artInfo.UV.Height
+                && Mouse.Position.Y < y + artInfo.DrawHeight
             )
             {
                 if (!ItemHold.IgnoreFixedPosition)
@@ -452,8 +452,8 @@ namespace ClassicUO.Game
                     var rect = new Rectangle(
                         x,
                         y,
-                        (int)(artInfo.UV.Width * scale),
-                        (int)(artInfo.UV.Height * scale)
+                        (int)(artInfo.DrawWidth * scale),
+                        (int)(artInfo.DrawHeight * scale)
                     );
 
                     sb.Draw(artInfo.Texture, rect, artInfo.UV, hue, 0f);
