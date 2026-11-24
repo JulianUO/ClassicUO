@@ -37,6 +37,15 @@ NAME_CLASS = {
     "marble": "paved", "tile": "paved", "brick": "paved", "sand stone": "paved",
     "void": "void", "void!!!!!!": "void", "nodraw": "void", "ed": "void",
 }
+# Unnamed tile ranges whose terrain Julian confirmed for Ascension (2026-11-24).
+ID_RANGE_CLASS = [
+    (0x004C, 0x006F, "seabed"),   # sea bed and its look-alikes
+    (0x3DC1, 0x3DFE, "swamp"),    # swamp and swamp borders
+]
+# Only these define what swamp looks like; the rest of the range are borders
+# whose corners are matched freely (grass-looking corners become grass).
+CORE_IDS = set(range(0x3DE9, 0x3DED))
+BORDER_IDS = set(range(0x3DC1, 0x3DFF)) - CORE_IDS
 CORNERS = ("N", "E", "S", "W")  # vertex (x,y), (x+1,y), (x+1,y+1), (x,y+1)
 PATCH = 12
 MARGIN = 0.6  # another class must be this much closer (ratio) for a corner to leave its own class
@@ -82,6 +91,10 @@ def main() -> None:
         corners[t] = corner_colors(sq)
 
     name_class = {t: NAME_CLASS.get(land[t].name.lower()) for t in used}
+    for t in used:
+        for lo, hi, cls in ID_RANGE_CLASS:
+            if lo <= t <= hi:
+                name_class[t] = cls
     for t in used:  # near-black art is void whatever its name
         if t in corners and corners[t].mean() < 12:
             name_class[t] = "void"
@@ -92,7 +105,8 @@ def main() -> None:
 
     # Pure prototypes: named tiles whose four corners look alike.
     protos = [(t, name_class[t]) for t in used
-              if t in corners and name_class[t] and name_class[t] != "void" and spread(t) < 10]
+              if t in corners and name_class[t] and name_class[t] != "void" and spread(t) < 10
+              and t not in BORDER_IDS]
     proto_cols = np.array([corners[t].mean(0) for t, _ in protos])
     proto_cls = [c for _, c in protos]
 
@@ -124,7 +138,7 @@ def main() -> None:
 
     # 2. Map neighbours: class of each cell by name, then neighbour classes per tile id.
     max_id = max(used) + 1
-    cls_names = sorted({c for c in NAME_CLASS.values()} | {"unknown"})
+    cls_names = sorted({c for c in NAME_CLASS.values()} | {c for _, _, c in ID_RANGE_CLASS} | {"unknown"})
     cls_index = {c: i for i, c in enumerate(cls_names)}
     lut = np.full(max_id, cls_index["unknown"], dtype=np.uint8)
     for t in used:
@@ -158,7 +172,12 @@ def main() -> None:
         if nm == "void":
             corner_cls = ["void"] * 4
         uniq = sorted(set(corner_cls))
-        if len(uniq) == 1 and spread(t) < 22:
+        if t in BORDER_IDS and len(uniq) == 1 and uniq[0] != nm:
+            # A border tile whose corners all read as the neighbour terrain still
+            # carries swamp in its middle: keep it as a swamp transition.
+            kind = "transition (border)"
+            cls = nm
+        elif len(uniq) == 1 and spread(t) < 22:
             kind = "pure"
             cls = nm or uniq[0]
         elif len(uniq) == 1:
