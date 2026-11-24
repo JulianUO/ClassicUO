@@ -41,7 +41,13 @@ NAME_CLASS = {
 ID_RANGE_CLASS = [
     (0x004C, 0x006F, "seabed"),   # sea bed and its look-alikes
     (0x3DC1, 0x3DFE, "swamp"),    # swamp and swamp borders
+    (0x07BD, 0x07BF, "sand"),     # sand to mountain borders
+    (0x07AC, 0x07AC, "paved"),    # road / pavers
+    (0x07D2, 0x07D3, "rock"),     # mountain
 ]
+# Borders whose second terrain is known: corners may only resolve to these.
+PAIR_OVERRIDE = {t: {"sand", "rock"} for t in range(0x07BD, 0x07C0)}
+CONFIRMED_IDS = set(range(0x004C, 0x0070)) | set(range(0x3DC1, 0x3DFF)) | set(range(0x07BD, 0x07C0)) | {0x07AC, 0x07D2, 0x07D3}
 # Only these define what swamp looks like; the rest of the range are borders
 # whose corners are matched freely (grass-looking corners become grass).
 CORE_IDS = set(range(0x3DE9, 0x3DED))
@@ -167,6 +173,8 @@ def main() -> None:
             review.append(t)
             continue
         allowed = set([c for c, _ in neigh[t].most_common() if c != "unknown"][:4])
+        if t in PAIR_OVERRIDE:
+            allowed = PAIR_OVERRIDE[t]
         labs = [nearest(c, nm, allowed) for c in corners[t]]
         corner_cls = [l for l, _ in labs]
         if nm == "void":
@@ -193,6 +201,8 @@ def main() -> None:
         art_ok = nm is None or nm in corner_cls or kind != "pure" or nm == cls
         neigh_ok = all(c in nb or c == cls for c in uniq) if nb else False
         conf = "high" if (art_ok and neigh_ok and nm) else ("medium" if (art_ok and (neigh_ok or nm)) else "low")
+        if t in CONFIRMED_IDS:
+            conf = "confirmed"
         rows.append([t, f"0x{t:04X}", lt.name, count_of[t], cls, kind, *corner_cls, mask, ";".join(nb), conf])
         if conf == "low" and count_of[t] >= 20:
             review.append(t)
