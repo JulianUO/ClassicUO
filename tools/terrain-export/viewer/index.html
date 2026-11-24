@@ -146,7 +146,7 @@ async function main() {
     loadImageRGBA('atlas_texmap.png'),
     fetch('manifest.json').then(r => r.json()),
   ]);
-  const [matImg, vclassImg] = await Promise.all([loadImageRGBA('materials.jpg'), loadImageRGBA('vertex_class.png')]);
+  const [matImg, vclassImg] = await Promise.all([loadImageRGBA(manifest.blend.materials.file), loadImageRGBA('vertex_class.png')]);
 
   const dv = new DataView(buf);
   const W = dv.getUint32(4, true), H = dv.getUint32(8, true);
@@ -160,16 +160,44 @@ async function main() {
   const R = manifest.region;
   $('regionline').textContent = `Cells ${R.x}–${R.x + R.w}, ${R.y}–${R.y + R.h} · 1 cell = ${cellM} m · land only`;
 
-  // Heights: raw and a smoothed copy (3x3 average, a stand-in for the client's 9-edge softening).
-  const zSmooth = new Float32Array(VW * VH);
-  for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
-    let s = 0, n = 0;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      const xx = x + dx, yy = y + dy;
-      if (xx < 0 || yy < 0 || xx >= VW || yy >= VH) continue;
-      s += zRaw[yy * VW + xx]; n++;
+  // Smooth heights: like the client's 9-edge tweak, every tile is split 3 x 3 and the
+  // new points follow a Catmull-Rom curve THROUGH the original corner heights, so every
+  // bump, cliff and coastline from the map stays exactly where it was, only rounded.
+  const SUB = 3;
+  let smoothGeo = null, zFine = null;
+  function catmull(p0, p1, p2, p3, t) {
+    return 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t);
+  }
+  function buildSmooth() {
+    const SW = W * SUB + 1, SH = H * SUB + 1;
+    const zAt = (x, y) => zRaw[Math.min(VH - 1, Math.max(0, y)) * VW + Math.min(VW - 1, Math.max(0, x))];
+    const rows = new Float32Array(VH * SW);  // pass 1: along x on every original row
+    for (let y = 0; y < VH; y++) for (let i = 0; i < SW; i++) {
+      const x = Math.floor(i / SUB), t = (i % SUB) / SUB;
+      rows[y * SW + i] = t === 0 ? zAt(x, y) : catmull(zAt(x - 1, y), zAt(x, y), zAt(x + 1, y), zAt(x + 2, y), t);
     }
-    zSmooth[y * VW + x] = s / n;
+    const rowAt = (y, i) => rows[Math.min(VH - 1, Math.max(0, y)) * SW + i];
+    zFine = new Float32Array(SW * SH);         // pass 2: along y
+    for (let j = 0; j < SH; j++) {
+      const y = Math.floor(j / SUB), t = (j % SUB) / SUB;
+      for (let i = 0; i < SW; i++) {
+        zFine[j * SW + i] = t === 0 ? rowAt(y, i) : catmull(rowAt(y - 1, i), rowAt(y, i), rowAt(y + 1, i), rowAt(y + 2, i), t);
+      }
+    }
+    const p = new Float32Array(SW * SH * 3);
+    for (let j = 0; j < SH; j++) for (let i = 0; i < SW; i++) {
+      const o = (j * SW + i) * 3;
+      p[o] = (i / SUB) * cellM; p[o + 2] = (j / SUB) * cellM;
+    }
+    const ix = new Uint32Array((SW - 1) * (SH - 1) * 6);
+    let n = 0;
+    for (let j = 0; j < SH - 1; j++) for (let i = 0; i < SW - 1; i++) {
+      const a = j * SW + i, b = a + 1, c = a + SW, d = c + 1;
+      ix[n++] = a; ix[n++] = c; ix[n++] = d; ix[n++] = a; ix[n++] = d; ix[n++] = b;
+    }
+    smoothGeo = new THREE.BufferGeometry();
+    smoothGeo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    smoothGeo.setIndex(new THREE.BufferAttribute(ix, 1));
   }
 
   // Geometry: one vertex per cell corner. Tile (x, y) spans vertices (x, y)..(x+1, y+1).
@@ -195,13 +223,22 @@ async function main() {
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
 
   let hScale = 1, useSmooth = false;
+  let mesh = null;
   function applyHeights() {
-    const src = useSmooth ? zSmooth : zRaw;
-    for (let i = 0; i < VW * VH; i++) pos[i * 3 + 1] = src[i] * zM * hScale;
-    geo.attributes.position.needsUpdate = true;
-    geo.computeVertexNormals();
-    geo.computeBoundingSphere();
-    geo.computeBoundingBox();
+    let g = geo;
+    if (useSmooth) {
+      if (!smoothGeo) buildSmooth();
+      g = smoothGeo;
+      const p = g.attributes.position.array;
+      for (let i = 0; i < zFine.length; i++) p[i * 3 + 1] = zFine[i] * zM * hScale;
+    } else {
+      for (let i = 0; i < VW * VH; i++) pos[i * 3 + 1] = zRaw[i] * zM * hScale;
+    }
+    g.attributes.position.needsUpdate = true;
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    g.computeBoundingBox();
+    if (mesh) mesh.geometry = g;
   }
   applyHeights();
 
@@ -232,6 +269,9 @@ async function main() {
   const MP = manifest.blend.materials.layer_px;
   const matArr = atlasToArray(matImg, classOrder.length, 1, MP);
   matArr.wrapS = matArr.wrapT = THREE.RepeatWrapping;
+  matArr.magFilter = THREE.NearestFilter;  // keep the pixels crisp when zoomed in
+  const prioList = manifest.blend.materials.priority || classOrder;
+  const prio = classOrder.map(c => Math.max(0, prioList.indexOf(c)) / (prioList.length - 1));
   const waterIdx = classOrder.indexOf('water');
 
   const S = manifest.atlas.slot_px;
@@ -245,6 +285,7 @@ async function main() {
       uSlots: { value: slotTex }, uFlags: { value: flagTex },
       uSize: { value: new THREE.Vector2(W, H) }, uCell: { value: cellM },
       uVClass: { value: vclassTex }, uMat: { value: matArr }, uWater: { value: waterIdx },
+      uPrio: { value: prio }, uMatTiles: { value: manifest.blend.materials.tiles_per_layer || 2 },
       uMode: { value: 0 }, uGrid: { value: 0 }, uTime: { value: 0 },
       uSun: { value: new THREE.Vector3(-0.45, 0.8, -0.4).normalize() },
     },
@@ -261,6 +302,7 @@ async function main() {
       uniform sampler2DArray uArt; uniform sampler2DArray uTex;
       uniform usampler2D uSlots; uniform usampler2D uFlags;
       uniform usampler2D uVClass; uniform sampler2DArray uMat; uniform int uWater;
+      uniform float uPrio[NCLASS]; uniform float uMatTiles;
       uniform vec2 uSize; uniform float uCell; uniform int uMode; uniform int uGrid;
       uniform float uTime; uniform vec3 uSun;
       out vec4 outColor;
@@ -269,72 +311,47 @@ async function main() {
         vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
         return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
       }
-      // Modern look: each corner carries two terrains and a weight; the four corners are
-      // blended bilinearly, with noise so borders wander instead of following the tile grid.
-      vec2 gUV; vec2 gX; vec2 gY;
-      vec3 corner(ivec2 v, out float wet) {
+      // Modern look. Each vertex carries up to two terrains and a weight. The four
+      // corners give each terrain a coverage at this pixel; the terrain with the best
+      // coverage + priority + noise wins, and only a thin ragged band blends with the
+      // runner-up, the way higher terrains paint over lower ones in the enhanced client.
+      int ks[8]; float ws[8]; int nk;
+      void addClass(int k, float w) {
+        for (int i = 0; i < 8; i++) { if (i < nk && ks[i] == k) { ws[i] += w; return; } }
+        ks[nk] = k; ws[nk] = w; nk++;
+      }
+      void addCorner(ivec2 v, float b) {
         uvec4 k = texelFetch(uVClass, clamp(v, ivec2(0), ivec2(uSize)), 0);
         float w2 = float(k.b) / 255.0;
-        vec3 a = textureGrad(uMat, vec3(gUV, float(k.r)), gX, gY).rgb;
-        vec3 b = k.g == k.r ? a : textureGrad(uMat, vec3(gUV, float(k.g)), gX, gY).rgb;
-        wet = (int(k.r) == uWater ? 1.0 - w2 : 0.0) + (int(k.g) == uWater && k.g != k.r ? w2 : 0.0);
-        return mix(a, b, w2);
+        addClass(int(k.r), b * (1.0 - w2));
+        if (k.g != k.r) addClass(int(k.g), b * w2);
       }
       vec3 modern(vec2 c, out float wet) {
-        vec2 jitter = vec2(vnoise(c * 0.6), vnoise(c * 0.6 + 31.0)) - 0.5;
-        jitter += 0.6 * (vec2(vnoise(c * 1.9 + 7.0), vnoise(c * 1.9 + 53.0)) - 0.5);
-        jitter += 0.3 * (vec2(vnoise(c * 5.1 + 3.0), vnoise(c * 5.1 + 91.0)) - 0.5);
-        vec2 cc = c + jitter * 1.1;
-        ivec2 v0 = ivec2(floor(cc));
-        vec2 f = fract(cc);
-        gUV = vPos.xz / 4.0;  // textures repeat every 4 m
-        gX = dFdx(gUV); gY = dFdy(gUV);
-        float e00, e10, e01, e11;
-        vec3 c00 = corner(v0, e00), c10 = corner(v0 + ivec2(1, 0), e10);
-        vec3 c01 = corner(v0 + ivec2(0, 1), e01), c11 = corner(v0 + ivec2(1, 1), e11);
-        vec3 col = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);
-        wet = mix(mix(e00, e10, f.x), mix(e01, e11, f.x), f.y);
-        return col;
-      }
-      void main() {
-        vPos = position; vNormal = normal;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */`
-      precision highp float; precision highp int;
-      precision highp sampler2DArray; precision highp usampler2D;
-      in vec3 vPos; in vec3 vNormal;
-      uniform sampler2DArray uArt; uniform sampler2DArray uTex;
-      uniform usampler2D uSlots; uniform usampler2D uFlags;
-      uniform usampler2D uVClass; uniform sampler2DArray uMat; uniform int uWater;
-      uniform vec2 uSize; uniform float uCell; uniform int uMode; uniform int uGrid;
-      uniform float uTime; uniform vec3 uSun;
-      out vec4 outColor;
-      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float vnoise(vec2 p) {
-        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
-      }
-      // Modern look: blend the four corner classes of this cell, with noise so borders are not straight.
-      vec3 modern(vec2 c, out float wet) {
-        vec2 jitter = vec2(vnoise(c * 0.8), vnoise(c * 0.8 + 31.0)) - 0.5;
-        jitter += 0.5 * (vec2(vnoise(c * 2.3 + 7.0), vnoise(c * 2.3 + 53.0)) - 0.5);
-        vec2 cc = c + jitter * 0.7;
-        ivec2 v0 = clamp(ivec2(floor(cc)), ivec2(0), ivec2(uSize) - 1);
-        vec2 f = smoothstep(0.15, 0.85, fract(cc));
-        int k00 = int(texelFetch(uVClass, v0, 0).r);
-        int k10 = int(texelFetch(uVClass, v0 + ivec2(1, 0), 0).r);
-        int k01 = int(texelFetch(uVClass, v0 + ivec2(0, 1), 0).r);
-        int k11 = int(texelFetch(uVClass, v0 + ivec2(1, 1), 0).r);
-        vec2 uv = vPos.xz / 4.0;  // textures repeat every 4 m
+        nk = 0;
+        ivec2 v0 = ivec2(floor(c));
+        vec2 f = fract(c);
+        addCorner(v0, (1.0 - f.x) * (1.0 - f.y));
+        addCorner(v0 + ivec2(1, 0), f.x * (1.0 - f.y));
+        addCorner(v0 + ivec2(0, 1), (1.0 - f.x) * f.y);
+        addCorner(v0 + ivec2(1, 1), f.x * f.y);
+        // Pixel-snapped noise (16 steps per tile) keeps edges ragged and pixel-art crisp.
+        vec2 q = floor(c * 16.0) / 16.0;
+        float nz = vnoise(q * 1.3) * 0.6 + vnoise(q * 4.1 + 17.0) * 0.4;
+        int b1 = 0, b2 = -1; float s1 = -9.0, s2 = -9.0;
+        for (int i = 0; i < 8; i++) {
+          if (i >= nk) break;
+          float sc = ws[i] + 0.18 * uPrio[ks[i]] + (nz - 0.5) * 0.55 * min(ws[i] * 4.0, 1.0);
+          if (sc > s1) { s2 = s1; b2 = b1; s1 = sc; b1 = i; }
+          else if (sc > s2) { s2 = sc; b2 = i; }
+        }
+        // Textures repeat every uMatTiles tiles, locked to the tile grid like UO texmaps.
+        vec2 uv = c / uMatTiles;
         vec2 gx = dFdx(uv), gy = dFdy(uv);
-        float w00 = (1.0 - f.x) * (1.0 - f.y), w10 = f.x * (1.0 - f.y), w01 = (1.0 - f.x) * f.y, w11 = f.x * f.y;
-        vec3 col = w00 * textureGrad(uMat, vec3(uv, float(k00)), gx, gy).rgb
-                 + w10 * textureGrad(uMat, vec3(uv, float(k10)), gx, gy).rgb
-                 + w01 * textureGrad(uMat, vec3(uv, float(k01)), gx, gy).rgb
-                 + w11 * textureGrad(uMat, vec3(uv, float(k11)), gx, gy).rgb;
-        wet = (k00 == uWater ? w00 : 0.0) + (k10 == uWater ? w10 : 0.0) + (k01 == uWater ? w01 : 0.0) + (k11 == uWater ? w11 : 0.0);
-        return col;
+        vec3 a = textureGrad(uMat, vec3(uv, float(ks[b1])), gx, gy).rgb;
+        float t = b2 < 0 ? 1.0 : smoothstep(0.0, 0.06, s1 - s2);
+        vec3 b = b2 < 0 ? a : textureGrad(uMat, vec3(uv, float(ks[b2])), gx, gy).rgb;
+        wet = (ks[b1] == uWater ? 1.0 : 0.0) * t + (b2 >= 0 && ks[b2] == uWater ? 1.0 - t : 0.0);
+        return mix(b, a, 0.5 + 0.5 * t);
       }
       void main() {
         vec2 c = vPos.xz / uCell;
@@ -349,18 +366,19 @@ async function main() {
         if (uMode == 2) col = modern(c, mwet);
         else col = (uMode == 0 ? textureGrad(uArt, uvw, dx, dy) : textureGrad(uTex, uvw, dx, dy)).rgb;
         if ((fl & 2u) != 0u && uMode != 2) col = vec3(0.09, 0.08, 0.07);
+        // Like the client: flat ground is drawn exactly as its art; only slopes are shaded.
         vec3 n = normalize(vNormal);
+        float slope = clamp((1.0 - n.y) * 6.0, 0.0, 1.0);
         float lambert = max(dot(n, uSun), 0.0);
-        float light = 0.62 + 0.55 * lambert;
-        if (uMode == 2 && mwet > 0.0) {
+        float light = mix(1.0, 0.55 + 0.6 * lambert, slope);
+        if (mwet > 0.0) {
           float w = sin(c.x * 1.7 + uTime * 1.3) * sin(c.y * 1.3 - uTime * 0.9);
-          vec3 waterCol = vec3(0.11, 0.25, 0.36) * (1.0 + 0.08 * w) + 0.05 * pow(max(dot(reflect(-uSun, vec3(0, 1, 0)), normalize(vec3(1.0, 1.1, 1.0))), 0.0), 24.0);
-          col = mix(col * light, waterCol, mwet);
-          light = 1.0;
+          col *= 1.0 + 0.05 * w * mwet;
+          light = mix(light, 1.0, mwet);
         } else if ((fl & 1u) != 0u && uMode != 2) {
           float w = sin(c.x * 1.7 + uTime * 1.3) * sin(c.y * 1.3 - uTime * 0.9);
           col *= 1.0 + 0.06 * w;
-          light = 0.85 + 0.15 * lambert;
+          light = 1.0;
         }
         col *= light;
         if (uGrid == 1) {
@@ -370,7 +388,7 @@ async function main() {
           col = mix(col, vec3(0.0), edge * 0.45);
         }
         outColor = vec4(col, 1.0);
-      }`,
+      }`.replace('NCLASS', String(classOrder.length)),
   });
   mat.extensions = { derivatives: true };
 
@@ -380,7 +398,7 @@ async function main() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x12100d);
-  const mesh = new THREE.Mesh(geo, mat);
+  mesh = new THREE.Mesh(useSmooth ? smoothGeo : geo, mat);
   scene.add(mesh);
 
   // The classic UO camera, kept fixed on purpose: the same projection the 2D client draws with.

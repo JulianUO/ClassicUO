@@ -16,7 +16,7 @@ Writes into --out:
   viewer_tiles.json   atlas slot -> [tile id, name, flags]
   vertex_class.png    (with --classes) per vertex: R main class, G second class, B its weight
   weights/<class>.png (with --classes) 8-bit layer weight maps, Unreal landscape layers
-  materials.jpg       (with --materials) one 256 px layer per class, modern look
+  materials.png       (with --materials) one 256 px layer (4x4 tiles) per class, modern look
 """
 
 from __future__ import annotations
@@ -47,7 +47,14 @@ CLASS_ORDER = ["void", "water", "grass", "forest", "jungle", "dirt", "furrows", 
                "rock", "cave", "snow", "swamp", "paved", "wood_floor", "obsidian", "lava", "acid", "unknown"]
 SOLID = {"void": (12, 11, 10), "water": (28, 62, 92), "lava": (200, 80, 20), "acid": (90, 160, 40),
          "unknown": (128, 128, 128)}
-MAT_PX = 256
+MAT_TILES = 4           # one material layer covers 4 x 4 tiles, aligned to the tile grid
+MAT_PX = 64 * MAT_TILES # 64 px per tile, the density of UO's own texmaps
+# Terrains with no good photo: use UO's own texmap for them.
+UO_ONLY = {"lava", "acid", "water", "void", "unknown"}
+# Blend priority, low to high: where two terrains meet, the higher one paints over
+# the lower one with a ragged edge instead of the two being averaged.
+PRIORITY = ["void", "unknown", "water", "seabed", "sand", "dirt", "furrows", "grass", "jungle",
+            "forest", "swamp", "snow", "rock", "cave", "obsidian", "lava", "acid", "paved", "wood_floor"]
 
 
 _UO = None
@@ -66,6 +73,41 @@ def class_colour(tiles: list) -> np.ndarray | None:
         acc += sq[..., :3].reshape(-1, 3).mean(0) * cells
         n += cells
     return acc / n if n else None
+
+
+def _class_texmaps(tiles: list, land) -> list[np.ndarray]:
+    out = []
+    for t, _ in sorted(tiles, key=lambda x: -x[1])[:8]:
+        tm = _UO.texmap(land[t].tex_id) if land[t].tex_id else None
+        if tm is not None:
+            out.append(np.array(Image.fromarray(tm).resize((64, 64), Image.BILINEAR))[..., :3])
+    return out
+
+
+def class_reference(tiles: list, land) -> np.ndarray | None:
+    """Pixels of UO's own texmaps for a terrain class, used as the target palette."""
+    if not tiles or _UO is None:
+        return None
+    tms = _class_texmaps(tiles, land)
+    return np.concatenate([t.reshape(-1, 3) for t in tms]) if tms else None
+
+
+def ref_tile(cls: str, tiles: list, land) -> np.ndarray:
+    tm = _class_texmaps(tiles, land)[0]
+    return np.tile(tm, (MAT_TILES, MAT_TILES, 1))
+
+
+def match_histogram(im: np.ndarray, ref: np.ndarray) -> np.ndarray:
+    out = np.empty(im.shape, np.float32)
+    for ch in range(3):
+        src = im[..., ch].ravel()
+        order = np.argsort(src, kind="stable")
+        q = np.linspace(0, 1, src.size)
+        target = np.quantile(ref[:, ch].astype(np.float32), q)
+        res = np.empty(src.size, np.float32)
+        res[order] = target
+        out[..., ch] = res.reshape(im.shape[:2])
+    return out
 
 
 def export_blend(args, rid: np.ndarray, land) -> dict:
@@ -119,22 +161,24 @@ def export_blend(args, rid: np.ndarray, land) -> dict:
     if args.materials:
         strip = np.zeros((MAT_PX * len(CLASS_ORDER), MAT_PX, 3), dtype=np.uint8)
         for i, c in enumerate(CLASS_ORDER):
+            ref = class_reference(pure_of.get(c, []), land)
             p = os.path.join(args.materials, f"{c}.jpg")
-            if os.path.exists(p):
+            if os.path.exists(p) and c not in UO_ONLY:
                 im = np.array(Image.open(p).convert("RGB").resize((MAT_PX, MAT_PX), Image.LANCZOS))
-                target = class_colour(pure_of.get(c, []))
-                if target is not None and args.match_colours:
-                    # Pull the photo's average colour toward UO's own colour for this terrain,
-                    # so the modern look keeps Britannia's palette.
-                    mean = im.reshape(-1, 3).mean(0)
-                    gain = np.clip(target / np.maximum(mean, 1), 0.4, 2.5)
-                    gain = 1 + args.match_colours * (gain - 1)
-                    im = np.clip(im * gain, 0, 255).astype(np.uint8)
+                if ref is not None and args.match_colours:
+                    # Match each channel's whole distribution (brightness AND contrast) to
+                    # UO's own texmaps for this terrain, so the photo takes Britannia's palette.
+                    im = (1 - args.match_colours) * im + args.match_colours * match_histogram(im, ref)
+            elif ref is not None:
+                im = ref_tile(c, pure_of.get(c, []), land)
             else:
                 im = np.zeros((MAT_PX, MAT_PX, 3), np.uint8) + np.array(SOLID.get(c, SOLID["unknown"]), np.uint8)
-            strip[i * MAT_PX:(i + 1) * MAT_PX] = im
-        Image.fromarray(strip).save(os.path.join(args.out, "materials.jpg"), quality=88)
-        info["materials"] = {"file": "materials.jpg", "layer_px": MAT_PX}
+            # UO stores colour as 15-bit (5 bits a channel): quantise to the same depth.
+            im = (np.clip(np.asarray(im, np.float32), 0, 255) / 255 * 31).round() * 255 / 31
+            strip[i * MAT_PX:(i + 1) * MAT_PX] = im.astype(np.uint8)
+        Image.fromarray(strip).save(os.path.join(args.out, "materials.png"), optimize=True)
+        info["materials"] = {"file": "materials.png", "layer_px": MAT_PX, "tiles_per_layer": MAT_TILES,
+                             "priority": PRIORITY}
         src = os.path.join(args.materials, "sources.json")
         if os.path.exists(src):
             info["materials"]["sources"] = json.load(open(src))
@@ -150,7 +194,7 @@ def main() -> None:
     ap.add_argument("--diffs", action="store_true", help="apply mapdifl/mapdif (off: map file as-is)")
     ap.add_argument("--classes", default=None, help="tile_classes.csv from classify_tiles.py: adds blend maps")
     ap.add_argument("--materials", default=None, help="folder of <class>.jpg textures for the modern look")
-    ap.add_argument("--match-colours", type=float, default=0.8,
+    ap.add_argument("--match-colours", type=float, default=1.0,
                     help="0..1, how far to pull each material's average colour to UO's colour for that terrain")
     args = ap.parse_args()
 
