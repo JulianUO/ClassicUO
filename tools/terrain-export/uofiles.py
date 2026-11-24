@@ -214,3 +214,109 @@ def diamond_to_square(diamond: np.ndarray, size: int = 44) -> np.ndarray:
     out[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
     out[..., 3] = 255
     return out
+
+
+# ---------------------------------------------------------------- statics
+STATIC_DTYPE = np.dtype([("id", "<u2"), ("x", "u1"), ("y", "u1"), ("z", "i1"), ("hue", "<u2")])
+
+S_BACKGROUND = 0x00000001
+S_SURFACE = 0x00000200
+S_FOLIAGE = 0x00020000
+S_NODIAGONAL = 0x02000000
+S_ROOF = 0x10000000
+
+
+@dataclass
+class StaticTile:
+    flags: int
+    height: int
+    name: str
+
+
+def load_static_tiledata(uo: "UOData") -> list[StaticTile]:
+    data = open(uo.path("tiledata.mul"), "rb").read()
+    new_format = len(data) >= 512 * (4 + 32 * 30) + 2048 * (4 + 32 * 41)
+    land_entry, entry = (30, 41) if new_format else (26, 37)
+    off = 512 * (4 + 32 * land_entry)
+    out: list[StaticTile] = []
+    while off + 4 + 32 * entry <= len(data):
+        off += 4
+        for _ in range(32):
+            if new_format:
+                flags = struct.unpack_from("<Q", data, off)[0]
+                height = data[off + 20]
+                name = data[off + 21: off + 41]
+            else:
+                flags = struct.unpack_from("<I", data, off)[0]
+                height = data[off + 16]
+                name = data[off + 17: off + 37]
+            out.append(StaticTile(flags, height, name.split(b"\0")[0].decode("latin-1").strip()))
+            off += entry
+    return out
+
+
+def load_statics(uo: "UOData", facet: int, x0: int, y0: int, w: int, h: int) -> np.ndarray:
+    """Statics inside a cell rectangle, as a structured array with absolute x, y."""
+    width, height = MAP_SIZES[facet]
+    bh = height // 8
+    idx = np.fromfile(uo.path(f"staidx{facet}.mul"), dtype="<i4").reshape(-1, 3)
+    mul = open(uo.path(f"statics{facet}.mul"), "rb")
+    rows = []
+    for bx in range(x0 // 8, (x0 + w + 7) // 8):
+        for by in range(y0 // 8, (y0 + h + 7) // 8):
+            b = bx * bh + by
+            if b >= len(idx):
+                continue
+            off, length, _ = idx[b]
+            if off < 0 or length <= 0 or off == -1:
+                continue
+            mul.seek(int(off))
+            arr = np.frombuffer(mul.read(int(length) // 7 * 7), dtype=STATIC_DTYPE).copy()
+            ax = arr["x"].astype(np.int32) + bx * 8
+            ay = arr["y"].astype(np.int32) + by * 8
+            keep = (ax >= x0) & (ax < x0 + w) & (ay >= y0) & (ay < y0 + h)
+            for a, xx, yy in zip(arr[keep], ax[keep], ay[keep]):
+                rows.append((int(a["id"]), xx, yy, int(a["z"]), int(a["hue"])))
+    return np.array(rows, dtype=[("id", "<u2"), ("x", "<i4"), ("y", "<i4"), ("z", "i1"), ("hue", "<u2")])
+
+
+def static_art(uo: "UOData", graphic: int, _cache={}) -> np.ndarray | None:
+    """RGBA art for a static item graphic (run-length encoded in art.mul)."""
+    key = (uo.folder, "artidx")
+    if key not in _cache:
+        _cache[key] = uo._open_indexed("artidx.mul", "art.mul")
+    idx, mul = _cache[key]
+    i = graphic + 0x4000
+    if i >= len(idx):
+        return None
+    offset, length, _ = idx[i]
+    if offset < 0 or length <= 0:
+        return None
+    mul.seek(int(offset))
+    buf = np.frombuffer(mul.read(int(length)), dtype="<u2")
+    if buf.size < 4:
+        return None
+    w, h = int(buf[2]), int(buf[3])
+    if w <= 0 or h <= 0 or w > 1024 or h > 1024:
+        return None
+    lookup = buf[4:4 + h].astype(np.int64)
+    start = 4 + h
+    px = np.zeros((h, w), dtype=np.uint16)
+    alpha = np.zeros((h, w), dtype=bool)
+    for y in range(h):
+        p = start + int(lookup[y])
+        x = 0
+        while p + 1 < buf.size:
+            xoff, run = int(buf[p]), int(buf[p + 1])
+            p += 2
+            if xoff + run == 0:
+                break
+            x += xoff
+            if run and x + run <= w:
+                px[y, x:x + run] = buf[p:p + run]
+                alpha[y, x:x + run] = True
+            p += run
+            x += run
+    rgba = color1555_to_rgba(px)
+    rgba[..., 3] = np.where(alpha, 255, 0)
+    return rgba

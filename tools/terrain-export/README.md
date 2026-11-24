@@ -58,3 +58,14 @@ Partition's tiled landscape import. Unreal scale: X/Y 150, Z 7.5
 
 The viewer is locked to the classic UO projection: a cell moves 22 px across
 and 22 px down per step in x or y, and each z lifts it 4 px. Only pan and zoom.
+
+## Statics (viewer only)
+
+```
+python3 export_statics.py --uo "C:/Games/Ascension UO" --facet 0 \
+    --region 1220,1390,512,512 --out out/britain
+```
+
+Packs each static's original art into 2048 px pages and writes positions.
+The viewer's "Draw statics" checkbox draws them as screen-facing sprites,
+anchored where ChunkMesh.cs anchors them. Hues are not applied yet.

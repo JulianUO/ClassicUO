@@ -83,6 +83,7 @@
   </div>
   <label class="check"><input id="smooth" type="checkbox"> Smooth heights</label>
   <label class="check"><input id="grid" type="checkbox"> Show tile grid</label>
+  <label class="check"><input id="statics" type="checkbox"> Draw statics <span class="val" id="staticsNote"></span></label>
   <details>
     <summary>How to move</summary>
     <p>The camera is locked to the classic UO view. Drag or use the arrow keys to pan, scroll or pinch to zoom. Click the ground to read that tile.</p>
@@ -468,9 +469,100 @@ async function main() {
   $('modeArt').onclick = () => setMode(0);
   $('modeTex').onclick = () => setMode(1);
   $('modeMod').onclick = () => setMode(2);
-  $('hscale').oninput = (e) => { hScale = +e.target.value; $('hval').textContent = hScale.toFixed(1) + '×'; applyHeights(); };
+  $('hscale').oninput = (e) => { hScale = +e.target.value; $('hval').textContent = hScale.toFixed(1) + '×'; applyHeights(); placeStatics(); };
   $('smooth').onchange = (e) => { useSmooth = e.target.checked; applyHeights(); };
   $('grid').onchange = (e) => { mat.uniforms.uGrid.value = e.target.checked ? 1 : 0; };
+
+  // Statics: original art drawn as sprites exactly where the client puts them.
+  // The client anchors a static's bottom centre on the bottom corner of its tile
+  // diamond (vertex x+1, y+1) lifted z * 4 px. Each sprite is a quad facing the
+  // screen, built from the camera's own pixel axes, so 1 art pixel = 1 screen px at zoom 1.
+  const PX_RIGHT = new THREE.Vector3(1 / (2 * K), 0, -1 / (2 * K));
+  const upB = 1 / (K * DEPTH_Y + KZ), upA = -DEPTH_Y * upB / 2;
+  const PX_UP = new THREE.Vector3(upA, upB, upA);       // one pixel up, no depth change
+  const TOWARD = new THREE.Vector3(1, DEPTH_Y, 1);      // moves nearer without moving on screen
+  let staticsMesh = null, staticsData = null;
+  async function loadStatics() {
+    const [data, spr] = await Promise.all([
+      fetch('statics_data.json').then(r => r.json()),
+      fetch('statics_sprites.json').then(r => r.json()),
+    ]);
+    const pages = await Promise.all(Array.from({ length: spr.pages }, (_, i) => loadImageRGBA(`statics_page_${i}.png`)));
+    const P = spr.page_px;
+    const all = new Uint8Array(P * P * 4 * spr.pages);
+    pages.forEach((p, i) => all.set(p.data, i * P * P * 4));
+    const tex = new THREE.DataArrayTexture(all, P, P, spr.pages);
+    tex.colorSpace = THREE.NoColorSpace;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
+    tex.needsUpdate = true;
+    const bytes = Uint8Array.from(atob(data.base64), c => c.charCodeAt(0));
+    staticsData = { dv: new DataView(bytes.buffer), n: data.count, spr: spr.sprites, P, tex };
+    const n = data.count;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 12), 3));
+    const uvp = new Float32Array(n * 12);
+    const idx = new Uint32Array(n * 6);
+    for (let i = 0; i < n; i++) {
+      const s = staticsData.spr[staticsData.dv.getUint16(i * 10, true)];
+      const [, page, sx, sy, w, h] = s;
+      const u0 = sx / P, u1 = (sx + w) / P, v0 = sy / P, v1 = (sy + h) / P;
+      // corners: bottom-left, bottom-right, top-right, top-left
+      uvp.set([u0, v1, page, u1, v1, page, u1, v0, page, u0, v0, page], i * 12);
+      const b = i * 4;
+      idx.set([b, b + 1, b + 2, b, b + 2, b + 3], i * 6);
+    }
+    geo.setAttribute('uvp', new THREE.BufferAttribute(uvp, 3));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    const smat = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      uniforms: { uPages: { value: tex } },
+      vertexShader: /* glsl */`
+        in vec3 uvp; out vec3 vUv;
+        void main() { vUv = uvp; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: /* glsl */`
+        precision highp float; precision highp sampler2DArray;
+        in vec3 vUv; uniform sampler2DArray uPages; out vec4 outColor;
+        void main() {
+          vec4 c = texture(uPages, vUv);
+          if (c.a < 0.5) discard;
+          outColor = vec4(c.rgb, 1.0);
+        }`,
+    });
+    staticsMesh = new THREE.Mesh(geo, smat);
+    staticsMesh.frustumCulled = false;
+    scene.add(staticsMesh);
+    placeStatics();
+    $('staticsNote').textContent = n.toLocaleString();
+  }
+  function placeStatics() {
+    if (!staticsMesh) return;
+    const { dv, n, spr } = staticsData;
+    const pos = staticsMesh.geometry.attributes.position.array;
+    const A = new THREE.Vector3(), p = new THREE.Vector3();
+    for (let i = 0; i < n; i++) {
+      const o = i * 10;
+      const s = spr[dv.getUint16(o, true)];
+      const w = s[4], h = s[5];
+      const x = dv.getInt16(o + 2, true), y = dv.getInt16(o + 4, true), z = dv.getInt8(o + 6), prio = dv.getUint8(o + 7);
+      A.set((x + 1) * cellM, z * zM * hScale, (y + 1) * cellM)
+        .addScaledVector(TOWARD, 0.04 + prio * 0.0015 + (i % 64) * 0.00001);
+      const corners = [[-w / 2, 0], [w / 2, 0], [w / 2, h], [-w / 2, h]];
+      corners.forEach(([dx, dy], k) => {
+        p.copy(A).addScaledVector(PX_RIGHT, dx).addScaledVector(PX_UP, dy);
+        pos.set([p.x, p.y, p.z], i * 12 + k * 3);
+      });
+    }
+    staticsMesh.geometry.attributes.position.needsUpdate = true;
+  }
+  $('statics').onchange = async (e) => {
+    if (e.target.checked && !staticsMesh) {
+      $('staticsNote').textContent = 'loading…';
+      try { await loadStatics(); } catch (err) { $('staticsNote').textContent = 'failed to load'; console.error(err); return; }
+    }
+    if (staticsMesh) staticsMesh.visible = e.target.checked;
+  };
 
   // Click to read a tile.
   const ray = new THREE.Raycaster();
