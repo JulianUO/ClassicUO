@@ -168,6 +168,9 @@ def export_blend(args, rid: np.ndarray, land) -> dict:
     info = {"vertex_class": "vertex_class.png", "vertex_class_encoding": "R=class, G=second class, B=second weight*255", "class_order": CLASS_ORDER, "weight_maps": {c: f"weights/{c}.png" for c in layers}}
     if args.materials:
         strip = np.zeros((MAT_PX * len(CLASS_ORDER), MAT_PX, 3), dtype=np.uint8)
+        # Normal maps in the same layout, so the viewer can light the ground's
+        # surface detail (stones, ruts, roots). Flat where there is no photo.
+        nstrip = np.zeros_like(strip) + np.array([128, 128, 255], np.uint8)
         for i, c in enumerate(CLASS_ORDER):
             ref = class_reference(pure_of.get(c, []), land)
             p = os.path.join(args.materials, f"{c}.jpg")
@@ -175,6 +178,10 @@ def export_blend(args, rid: np.ndarray, land) -> dict:
                 n = TILES_PER_PHOTO.get(c, MAT_TILES)
                 im = np.array(Image.open(p).convert("RGB").resize((64 * n, 64 * n), Image.LANCZOS))
                 im = np.tile(im, (MAT_TILES // n, MAT_TILES // n, 1))
+                pn = os.path.join(args.materials, f"{c}_nor.jpg")
+                if os.path.exists(pn):
+                    nm = np.array(Image.open(pn).convert("RGB").resize((64 * n, 64 * n), Image.LANCZOS))
+                    nstrip[i * MAT_PX:(i + 1) * MAT_PX] = np.tile(nm, (MAT_TILES // n, MAT_TILES // n, 1))
                 if ref is not None and args.match_colours:
                     # Match each channel's whole distribution (brightness AND contrast) to
                     # UO's own texmaps for this terrain, so the photo takes Britannia's palette.
@@ -187,7 +194,8 @@ def export_blend(args, rid: np.ndarray, land) -> dict:
             im = (np.clip(np.asarray(im, np.float32), 0, 255) / 255 * 31).round() * 255 / 31
             strip[i * MAT_PX:(i + 1) * MAT_PX] = im.astype(np.uint8)
         Image.fromarray(strip).save(os.path.join(args.out, "materials.png"), optimize=True)
-        info["materials"] = {"file": "materials.png", "layer_px": MAT_PX, "tiles_per_layer": MAT_TILES,
+        Image.fromarray(nstrip).save(os.path.join(args.out, "materials_normal.png"), optimize=True)
+        info["materials"] = {"file": "materials.png", "layer_px": MAT_PX, "tiles_per_layer": MAT_TILES, "normals": "materials_normal.png",
                              "tiles_per_photo": {c: TILES_PER_PHOTO[c] for c in CLASS_ORDER if c in TILES_PER_PHOTO},
                              "priority": PRIORITY}
         src = os.path.join(args.materials, "sources.json")

@@ -69,3 +69,14 @@ python3 export_statics.py --uo "C:/Games/Ascension UO" --facet 0 \
 Packs each static's original art into 2048 px pages and writes positions.
 The viewer's "Draw statics" checkbox draws them as screen-facing sprites,
 anchored where ChunkMesh.cs anchors them. Hues are not applied yet.
+It also writes `lights.json`: torches, sconces, braziers and fires, which light
+the ground at night.
+
+## Lighting (Modern)
+
+Modern lights the ground in linear light: each photo's normal map
+(`materials_normal.png`) on top of the terrain's own slope, ambient occlusion
+and terrain shadows worked out from the original heights, then a filmic tone
+curve. The "Time of day" slider moves the sun east to west and swaps it for a
+cool moon at night, when the torches come on. Tile art and Texmaps keep the
+client's look and are only tinted for the time of day.

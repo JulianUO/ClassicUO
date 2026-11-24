@@ -57,11 +57,13 @@
     max-width: calc(100vw - 32px); font-variant-numeric: tabular-nums;
   }
   #readout b { color: var(--gold); font-weight: 400; }
+  #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.5) 100%); }
   #status { position: fixed; inset: 0; display: grid; place-items: center; font-family: var(--display); color: var(--muted); letter-spacing: 0.06em; z-index: 1; pointer-events: none; }
   @media (max-width: 520px) { #controls { padding: 12px; gap: 10px; } details { display: none; } }
 </style>
 
 <canvas id="view" aria-label="3D terrain of Britain, Felucca"></canvas>
+<div id="vignette" aria-hidden="true"></div>
 <div id="status">Loading Britain…</div>
 
 <section class="card" id="controls" aria-label="Viewer controls">
@@ -72,22 +74,26 @@
   <div class="row">
     <span class="label">Textures</span>
     <div class="seg" role="group" aria-label="Texture source">
-      <button id="modeArt" aria-pressed="true">Tile art</button>
+      <button id="modeArt" aria-pressed="false">Tile art</button>
       <button id="modeTex" aria-pressed="false">Texmaps</button>
-      <button id="modeMod" aria-pressed="false">Modern</button>
+      <button id="modeMod" aria-pressed="true">Modern</button>
     </div>
+  </div>
+  <div class="row">
+    <div class="rangehead"><span class="label">Time of day</span><span class="val" id="tval">16:30</span></div>
+    <input id="tod" type="range" min="0" max="24" step="0.25" value="16.5" aria-label="Time of day">
   </div>
   <div class="row">
     <div class="rangehead"><span class="label">Height scale</span><span class="val" id="hval">1.0×</span></div>
     <input id="hscale" type="range" min="0.5" max="3" step="0.1" value="1" aria-label="Height scale">
   </div>
-  <label class="check"><input id="smooth" type="checkbox"> Smooth heights</label>
+  <label class="check"><input id="smooth" type="checkbox" checked> Smooth heights</label>
   <label class="check"><input id="grid" type="checkbox"> Show tile grid</label>
   <label class="check"><input id="statics" type="checkbox"> Draw statics <span class="val" id="staticsNote"></span></label>
   <details>
     <summary>How to move</summary>
     <p>The camera is locked to the classic UO view. Drag or use the arrow keys to pan, scroll or pinch to zoom. Click the ground to read that tile.</p>
-    <p>Modern uses CC0 textures from Poly Haven, blended across tile corners from the decoded terrain classes.</p>
+    <p>Modern uses CC0 textures and normal maps from Poly Haven, blended across tile corners from the decoded terrain classes, lit by the sun or moon for the chosen time. Torches, braziers and fires light up at dusk.</p>
   </details>
 </section>
 
@@ -146,7 +152,11 @@ async function main() {
     loadImageRGBA('atlas_texmap.png'),
     fetch('manifest.json').then(r => r.json()),
   ]);
-  const [matImg, vclassImg] = await Promise.all([loadImageRGBA(manifest.blend.materials.file), loadImageRGBA('vertex_class.png')]);
+  const [matImg, vclassImg, norImg, lightList] = await Promise.all([
+    loadImageRGBA(manifest.blend.materials.file), loadImageRGBA('vertex_class.png'),
+    loadImageRGBA(manifest.blend.materials.normals),
+    fetch('lights.json').then(r => r.ok ? r.json() : { lights: [] }).then(j => j.lights).catch(() => []),
+  ]);
 
   const dv = new DataView(buf);
   const W = dv.getUint32(4, true), H = dv.getUint32(8, true);
@@ -222,7 +232,7 @@ async function main() {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
 
-  let hScale = 1, useSmooth = false;
+  let hScale = 1, useSmooth = true;
   let mesh = null;
   function applyHeights() {
     let g = geo;
@@ -268,8 +278,8 @@ async function main() {
   vclassTex.needsUpdate = true;
   const MP = manifest.blend.materials.layer_px;
   const matArr = atlasToArray(matImg, classOrder.length, 1, MP);
-  matArr.wrapS = matArr.wrapT = THREE.RepeatWrapping;
-  matArr.magFilter = THREE.NearestFilter;  // keep the pixels crisp when zoomed in
+  const norArr = atlasToArray(norImg, classOrder.length, 1, MP);
+  for (const t of [matArr, norArr]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
   const prioList = manifest.blend.materials.priority || classOrder;
   const prio = classOrder.map(c => Math.max(0, prioList.indexOf(c)) / (prioList.length - 1));
   const waterIdx = classOrder.indexOf('water');
@@ -278,16 +288,93 @@ async function main() {
   const artArr = atlasToArray(artImg, nSlots, cols, S);
   const texArr = atlasToArray(texImg, nSlots, cols, S);
 
+  // Ground light, one texel per map vertex: R = ambient occlusion from the original
+  // heights (hollows and the foot of cliffs get less sky), G = torch and fire light,
+  // B = sunlit (0 where a hill or cliff casts a shadow for the current sun).
+  const ground = new Uint8Array(VW * VH * 4);
+  {
+    const RAD = 4;
+    for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
+      const h = zRaw[y * VW + x];
+      let occ = 0, n = 0;
+      for (let dy = -RAD; dy <= RAD; dy++) for (let dx = -RAD; dx <= RAD; dx++) {
+        const d = Math.hypot(dx, dy);
+        if (d === 0 || d > RAD) continue;
+        const xx = Math.min(VW - 1, Math.max(0, x + dx)), yy = Math.min(VH - 1, Math.max(0, y + dy));
+        const rise = (zRaw[yy * VW + xx] - h) * zM / (d * cellM);
+        occ += Math.max(0, Math.atan(rise)) / (Math.PI / 2); n++;
+      }
+      ground[(y * VW + x) * 4] = Math.round(255 * Math.max(0.35, 1 - 1.6 * occ / n));
+    }
+    const LR = 6;
+    const lamp = new Float32Array(VW * VH);
+    for (const [lx, ly] of lightList) {
+      for (let dy = -LR; dy <= LR; dy++) for (let dx = -LR; dx <= LR; dx++) {
+        const x = lx + 1 + dx, y = ly + 1 + dy;
+        if (x < 0 || y < 0 || x >= VW || y >= VH) continue;
+        const t = Math.max(0, 1 - Math.hypot(dx, dy) / LR);
+        lamp[y * VW + x] += t * t;
+      }
+    }
+    for (let i = 0; i < VW * VH; i++) { ground[i * 4 + 1] = Math.round(255 * Math.min(1, lamp[i])); ground[i * 4 + 2] = 255; }
+  }
+  const groundTex = new THREE.DataTexture(ground, VW, VH, THREE.RGBAFormat, THREE.UnsignedByteType);
+  groundTex.minFilter = groundTex.magFilter = THREE.LinearFilter;
+  groundTex.colorSpace = THREE.NoColorSpace;
+  groundTex.needsUpdate = true;
+  // Terrain shadows: march from each vertex toward the sun over the original heights.
+  function castShadows(dir) {
+    const elev = Math.asin(Math.min(1, Math.max(-1, dir.y)));
+    const hx = dir.x, hz = dir.z, hl = Math.hypot(hx, hz) || 1;
+    const sx = hx / hl, sy = hz / hl, rise = Math.tan(Math.max(elev, 0.02)) * cellM / zM; // z per cell
+    for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
+      const h0 = zRaw[y * VW + x] * hScale + 0.5;
+      let lit = 1;
+      for (let d = 0.75; d < 40; d += 0.75) {
+        const ray = h0 + d * rise * hScale / hScale;
+        if (ray > 127) break;
+        const xx = Math.round(x + sx * d), yy = Math.round(y + sy * d);
+        if (xx < 0 || yy < 0 || xx >= VW || yy >= VH) break;
+        const over = zRaw[yy * VW + xx] * hScale - ray;
+        if (over > 0) { lit = Math.min(lit, Math.max(0, 1 - over / 3)); if (lit === 0) break; }
+      }
+      ground[(y * VW + x) * 4 + 2] = Math.round(255 * lit);
+    }
+    groundTex.needsUpdate = true;
+  }
+
+  // Light shared by the terrain and the statics.
+  const L = {
+    uSunDir: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Vector3(1, 1, 1) },
+    uAmbSky: { value: new THREE.Vector3(0.4, 0.45, 0.55) }, uAmbGround: { value: new THREE.Vector3(0.2, 0.18, 0.15) },
+    uLampCol: { value: new THREE.Vector3(1.6, 0.85, 0.35) }, uLamp: { value: 0 },
+    uTint: { value: new THREE.Vector3(1, 1, 1) }, uExposure: { value: 0.65 },
+    uGround: { value: groundTex }, uVSize: { value: new THREE.Vector2(VW, VH) }, uTime: { value: 0 },
+  };
+  const LIGHT_GLSL = /* glsl */`
+    uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uAmbSky; uniform vec3 uAmbGround;
+    uniform vec3 uLampCol; uniform float uLamp; uniform vec3 uTint; uniform float uExposure;
+    uniform sampler2D uGround; uniform vec2 uVSize; uniform float uTime;
+    vec3 toLin(vec3 c) { return pow(c, vec3(2.2)); }
+    vec3 toSrgb(vec3 c) { return pow(c, vec3(1.0 / 2.2)); }
+    vec3 aces(vec3 x) { x *= uExposure; return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+    vec4 groundAt(vec2 v) { return texture(uGround, (v + 0.5) / uVSize); }
+    vec3 lightAt(vec3 n, vec4 g) {
+      vec3 amb = mix(uAmbGround, uAmbSky, clamp(n.y * 0.5 + 0.5, 0.0, 1.0));
+      float sun = max(dot(n, uSunDir), 0.0) * g.b;
+      return amb * g.r + uSunCol * sun * mix(0.6, 1.0, g.r) + uLampCol * g.g * uLamp;
+    }`;
+
   const mat = new THREE.ShaderMaterial({
     glslVersion: THREE.GLSL3,
     uniforms: {
+      ...L,
       uArt: { value: artArr }, uTex: { value: texArr },
       uSlots: { value: slotTex }, uFlags: { value: flagTex },
       uSize: { value: new THREE.Vector2(W, H) }, uCell: { value: cellM },
-      uVClass: { value: vclassTex }, uMat: { value: matArr }, uWater: { value: waterIdx },
+      uVClass: { value: vclassTex }, uMat: { value: matArr }, uNor: { value: norArr }, uWater: { value: waterIdx },
       uPrio: { value: prio }, uMatTiles: { value: manifest.blend.materials.tiles_per_layer || 2 },
-      uMode: { value: 0 }, uGrid: { value: 0 }, uTime: { value: 0 },
-      uSun: { value: new THREE.Vector3(-0.45, 0.8, -0.4).normalize() },
+      uMode: { value: 2 }, uGrid: { value: 0 },
     },
     vertexShader: /* glsl */`
       out vec3 vPos; out vec3 vNormal;
@@ -301,10 +388,10 @@ async function main() {
       in vec3 vPos; in vec3 vNormal;
       uniform sampler2DArray uArt; uniform sampler2DArray uTex;
       uniform usampler2D uSlots; uniform usampler2D uFlags;
-      uniform usampler2D uVClass; uniform sampler2DArray uMat; uniform int uWater;
+      uniform usampler2D uVClass; uniform sampler2DArray uMat; uniform sampler2DArray uNor; uniform int uWater;
       uniform float uPrio[NCLASS]; uniform float uMatTiles;
       uniform vec2 uSize; uniform float uCell; uniform int uMode; uniform int uGrid;
-      uniform float uTime; uniform vec3 uSun;
+      LIGHT_GLSL
       out vec4 outColor;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float vnoise(vec2 p) {
@@ -313,8 +400,7 @@ async function main() {
       }
       // Modern look. Each vertex carries up to two terrains and a weight. The four
       // corners give each terrain a coverage at this pixel; the terrain with the best
-      // coverage + priority + noise wins, and only a thin ragged band blends with the
-      // runner-up, the way higher terrains paint over lower ones in the enhanced client.
+      // coverage + priority + noise wins, and a ragged band blends with the runner-up.
       int ks[8]; float ws[8]; int nk;
       void addClass(int k, float w) {
         for (int i = 0; i < 8; i++) { if (i < nk && ks[i] == k) { ws[i] += w; return; } }
@@ -326,7 +412,7 @@ async function main() {
         addClass(int(k.r), b * (1.0 - w2));
         if (k.g != k.r) addClass(int(k.g), b * w2);
       }
-      vec3 modern(vec2 c, out float wet) {
+      vec3 modern(vec2 c, out float wet, out vec3 nrm) {
         nk = 0;
         ivec2 v0 = ivec2(floor(c));
         vec2 f = fract(c);
@@ -334,9 +420,7 @@ async function main() {
         addCorner(v0 + ivec2(1, 0), f.x * (1.0 - f.y));
         addCorner(v0 + ivec2(0, 1), (1.0 - f.x) * f.y);
         addCorner(v0 + ivec2(1, 1), f.x * f.y);
-        // Pixel-snapped noise (16 steps per tile) keeps edges ragged and pixel-art crisp.
-        vec2 q = floor(c * 16.0) / 16.0;
-        float nz = vnoise(q * 1.3) * 0.6 + vnoise(q * 4.1 + 17.0) * 0.4;
+        float nz = vnoise(c * 1.3) * 0.6 + vnoise(c * 4.1 + 17.0) * 0.4;
         int b1 = 0, b2 = -1; float s1 = -9.0, s2 = -9.0;
         for (int i = 0; i < 8; i++) {
           if (i >= nk) break;
@@ -344,14 +428,20 @@ async function main() {
           if (sc > s1) { s2 = s1; b2 = b1; s1 = sc; b1 = i; }
           else if (sc > s2) { s2 = sc; b2 = i; }
         }
-        // Textures repeat every uMatTiles tiles, locked to the tile grid like UO texmaps.
         vec2 uv = c / uMatTiles;
         vec2 gx = dFdx(uv), gy = dFdy(uv);
+        float t = b2 < 0 ? 1.0 : smoothstep(0.0, 0.08, s1 - s2);
         vec3 a = textureGrad(uMat, vec3(uv, float(ks[b1])), gx, gy).rgb;
-        float t = b2 < 0 ? 1.0 : smoothstep(0.0, 0.06, s1 - s2);
-        vec3 b = b2 < 0 ? a : textureGrad(uMat, vec3(uv, float(ks[b2])), gx, gy).rgb;
+        vec3 na = textureGrad(uNor, vec3(uv, float(ks[b1])), gx, gy).rgb;
+        vec3 b = a, nb = na;
+        if (b2 >= 0) {
+          b = textureGrad(uMat, vec3(uv, float(ks[b2])), gx, gy).rgb;
+          nb = textureGrad(uNor, vec3(uv, float(ks[b2])), gx, gy).rgb;
+        }
         wet = (ks[b1] == uWater ? 1.0 : 0.0) * t + (b2 >= 0 && ks[b2] == uWater ? 1.0 - t : 0.0);
-        return mix(b, a, 0.5 + 0.5 * t);
+        float m = 0.5 + 0.5 * t;
+        nrm = mix(nb, na, m) * 2.0 - 1.0;
+        return mix(b, a, m);
       }
       void main() {
         vec2 c = vPos.xz / uCell;
@@ -361,36 +451,96 @@ async function main() {
         vec2 f = fract(c);
         vec2 dx = dFdx(c), dy = dFdy(c);
         vec3 uvw = vec3(f, float(slot));
+        vec3 gn = normalize(vNormal);
+        vec4 g = groundAt(c);
         vec3 col;
-        float mwet = 0.0;
-        if (uMode == 2) col = modern(c, mwet);
-        else col = (uMode == 0 ? textureGrad(uArt, uvw, dx, dy) : textureGrad(uTex, uvw, dx, dy)).rgb;
-        if ((fl & 2u) != 0u && uMode != 2) col = vec3(0.09, 0.08, 0.07);
-        // Like the client: flat ground is drawn exactly as its art; only slopes are shaded.
-        vec3 n = normalize(vNormal);
-        float slope = clamp((1.0 - n.y) * 6.0, 0.0, 1.0);
-        float lambert = max(dot(n, uSun), 0.0);
-        float light = mix(1.0, 0.55 + 0.6 * lambert, slope);
-        if (mwet > 0.0) {
-          float w = sin(c.x * 1.7 + uTime * 1.3) * sin(c.y * 1.3 - uTime * 0.9);
-          col *= 1.0 + 0.05 * w * mwet;
-          light = mix(light, 1.0, mwet);
-        } else if ((fl & 1u) != 0u && uMode != 2) {
-          float w = sin(c.x * 1.7 + uTime * 1.3) * sin(c.y * 1.3 - uTime * 0.9);
-          col *= 1.0 + 0.06 * w;
-          light = 1.0;
+        if (uMode == 2) {
+          // Real lighting: the photo's normal map on top of the terrain's own slope,
+          // lit in linear light by sky, sun or moon (with terrain shadows) and torches.
+          float wet; vec3 tn;
+          vec3 alb = toLin(modern(c, wet, tn));
+          vec3 T = normalize(vec3(1.0, 0.0, 0.0) - gn * gn.x);
+          vec3 B = cross(gn, T);
+          vec3 n = normalize(T * tn.x + B * tn.y + gn * max(tn.z, 0.2));
+          vec3 land = alb * lightAt(n, g);
+          if (wet > 0.0) {
+            float tm = uTime;
+            vec2 w = vec2(0.0);
+            w += vec2(1.0, 0.6) * cos(dot(c, vec2(1.0, 0.6)) * 2.1 + tm * 1.1) * 0.10;
+            w += vec2(-0.7, 1.0) * cos(dot(c, vec2(-0.7, 1.0)) * 3.7 + tm * 1.6) * 0.07;
+            w += vec2(0.4, -1.0) * cos(dot(c, vec2(0.4, -1.0)) * 7.3 + tm * 2.4) * 0.05;
+            w += (vec2(vnoise(c * 3.0 + tm * 0.4), vnoise(c * 3.0 + 31.0 - tm * 0.4)) - 0.5) * 0.25;
+            vec3 wn = normalize(vec3(-w.x, 1.0, -w.y));
+            vec3 V = normalize(vec3(1.0, 1.1, 1.0));
+            float fres = 0.04 + 0.96 * pow(1.0 - max(dot(wn, V), 0.0), 5.0);
+            vec3 deep = vec3(0.004, 0.018, 0.035);
+            vec3 body = mix(deep, alb * 0.35, 0.25) * (uAmbSky + uSunCol * 0.25);
+            vec3 hv = normalize(uSunDir + V);
+            float spec = pow(max(dot(wn, hv), 0.0), 90.0) * g.b;
+            vec3 water = body + uAmbSky * 0.5 * fres + uSunCol * spec * 1.2 + uLampCol * g.g * uLamp * 0.15;
+            land = mix(land, water, wet);
+          }
+          col = toSrgb(aces(land));
+          float lum = dot(col, vec3(0.299, 0.587, 0.114));
+          col = mix(vec3(lum), col, 0.75);
+        } else {
+          col = (uMode == 0 ? textureGrad(uArt, uvw, dx, dy) : textureGrad(uTex, uvw, dx, dy)).rgb;
+          if ((fl & 2u) != 0u) col = vec3(0.09, 0.08, 0.07);
+          // Classic modes: art as the client draws it, slopes shaded, tinted for the time of day.
+          float slope = clamp((1.0 - gn.y) * 6.0, 0.0, 1.0);
+          float light = mix(1.0, 0.55 + 0.6 * max(dot(gn, normalize(vec3(-0.45, 0.8, -0.4))), 0.0), slope);
+          if ((fl & 1u) != 0u) {
+            float w = sin(c.x * 1.7 + uTime * 1.3) * sin(c.y * 1.3 - uTime * 0.9);
+            col *= 1.0 + 0.06 * w;
+            light = 1.0;
+          }
+          col *= light * uTint + uLampCol * g.g * uLamp * 0.35;
         }
-        col *= light;
         if (uGrid == 1) {
-          vec2 g = abs(f - 0.5);
+          vec2 gg = abs(f - 0.5);
           vec2 fw = fwidth(c);
-          float edge = 1.0 - smoothstep(0.0, 1.2, min((0.5 - g.x) / fw.x, (0.5 - g.y) / fw.y));
+          float edge = 1.0 - smoothstep(0.0, 1.2, min((0.5 - gg.x) / fw.x, (0.5 - gg.y) / fw.y));
           col = mix(col, vec3(0.0), edge * 0.45);
         }
         outColor = vec4(col, 1.0);
-      }`.replace('NCLASS', String(classOrder.length)),
+      }`.replace('NCLASS', String(classOrder.length)).replace('LIGHT_GLSL', LIGHT_GLSL),
   });
   mat.extensions = { derivatives: true };
+
+  // Time of day: the sun rises in the east (+x), crosses the south (+y) and sets in
+  // the west; at night a cool moon lights the land and torches come on.
+  const lerp3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function lightFor(h) {
+    const a = (h - 6) / 12 * Math.PI;
+    const e = Math.sin(a);
+    const day = sstep(-0.12, 0.3, e), sunI = sstep(-0.04, 0.12, e), warm = 1 - sstep(0.05, 0.45, e);
+    const sunDir = new THREE.Vector3(Math.cos(a), Math.max(e, 0.05) * 1.1, 0.45).normalize();
+    const moonDir = new THREE.Vector3(-0.35, 0.85, 0.4).normalize();
+    let sunCol = lerp3([1.0, 0.95, 0.85], [1.0, 0.5, 0.22], warm).map(v => v * 2.2 * sunI);
+    const moonI = 1 - sstep(-0.15, 0.02, e);
+    const night = moonI > sunI;
+    if (night) sunCol = [0.16, 0.22, 0.42].map(v => v * moonI);
+    const sky = lerp3([0.05, 0.075, 0.15], lerp3([0.32, 0.38, 0.5], [0.42, 0.33, 0.32], warm * 0.6), day);
+    const gnd = sky.map((v, i) => v * [0.55, 0.5, 0.42][i]);
+    return { dir: night ? moonDir : sunDir, sunCol, sky, gnd, lamp: 1 - sstep(-0.02, 0.22, e) };
+  }
+  const flatLight = (l) => l.sky.map((v, i) => v + l.sunCol[i] * Math.max(l.dir.y, 0));
+  const noonFlat = flatLight(lightFor(12));
+  let shadowTimer = 0;
+  function setTime(h) {
+    const l = lightFor(h);
+    L.uSunDir.value.copy(l.dir);
+    L.uSunCol.value.set(...l.sunCol); L.uAmbSky.value.set(...l.sky); L.uAmbGround.value.set(...l.gnd);
+    L.uLamp.value = l.lamp;
+    const fl = flatLight(l);
+    L.uTint.value.set(...fl.map((v, i) => Math.min(1.05, Math.pow(v / noonFlat[i], 1 / 2.2))));
+    const hh = Math.floor(h) % 24, mm = Math.round((h % 1) * 60);
+    $('tval').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    clearTimeout(shadowTimer);
+    shadowTimer = setTimeout(() => castShadows(l.dir), 30);
+  }
+  setTime(16.5);
 
   const canvas = $('view');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -433,7 +583,7 @@ async function main() {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
-    if (!reduce) mat.uniforms.uTime.value = clock.getElapsedTime();
+    if (!reduce) L.uTime.value = clock.getElapsedTime();
     renderer.render(scene, camera);
   });
 
@@ -487,8 +637,9 @@ async function main() {
   $('modeArt').onclick = () => setMode(0);
   $('modeTex').onclick = () => setMode(1);
   $('modeMod').onclick = () => setMode(2);
-  $('hscale').oninput = (e) => { hScale = +e.target.value; $('hval').textContent = hScale.toFixed(1) + '×'; applyHeights(); placeStatics(); };
+  $('hscale').oninput = (e) => { hScale = +e.target.value; $('hval').textContent = hScale.toFixed(1) + '×'; applyHeights(); placeStatics(); setTime(+$('tod').value); };
   $('smooth').onchange = (e) => { useSmooth = e.target.checked; applyHeights(); };
+  $('tod').oninput = (e) => setTime(+e.target.value);
   $('grid').onchange = (e) => { mat.uniforms.uGrid.value = e.target.checked ? 1 : 0; };
 
   // Statics: original art drawn as sprites exactly where the client puts them.
@@ -532,21 +683,38 @@ async function main() {
       idx.set([b, b + 1, b + 2, b, b + 2, b + 3], i * 6);
     }
     geo.setAttribute('uvp', new THREE.BufferAttribute(uvp, 3));
+    const cellA = new Float32Array(n * 8);
+    for (let i = 0; i < n; i++) {
+      const x = staticsData.dv.getInt16(i * 10 + 2, true) + 1, y = staticsData.dv.getInt16(i * 10 + 4, true) + 1;
+      cellA.set([x, y, x, y, x, y, x, y], i * 8);
+    }
+    geo.setAttribute('cell', new THREE.BufferAttribute(cellA, 2));
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
     const smat = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
-      uniforms: { uPages: { value: tex } },
+      uniforms: { ...L, uPages: { value: tex }, uMode: mat.uniforms.uMode },
       vertexShader: /* glsl */`
-        in vec3 uvp; out vec3 vUv;
-        void main() { vUv = uvp; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        in vec3 uvp; in vec2 cell; out vec3 vUv; out vec2 vCell;
+        void main() { vUv = uvp; vCell = cell; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: /* glsl */`
         precision highp float; precision highp sampler2DArray;
-        in vec3 vUv; uniform sampler2DArray uPages; out vec4 outColor;
+        in vec3 vUv; in vec2 vCell; uniform sampler2DArray uPages; uniform int uMode; out vec4 outColor;
+        LIGHT_GLSL
         void main() {
           vec4 c = texture(uPages, vUv);
           if (c.a < 0.5) discard;
-          outColor = vec4(c.rgb, 1.0);
-        }`,
+          vec4 g = groundAt(vCell);
+          vec3 col;
+          if (uMode == 2) {
+            // Sprites face the camera: light them as a surface tilted toward the viewer.
+            vec3 n = normalize(vec3(0.55, 1.0, 0.55));
+            col = toSrgb(aces(toLin(c.rgb) * lightAt(n, vec4(1.0, g.g, g.b, 1.0))));
+            col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.85);
+          } else {
+            col = c.rgb * (uTint + uLampCol * g.g * uLamp * 0.35);
+          }
+          outColor = vec4(col, 1.0);
+        }`.replace('LIGHT_GLSL', LIGHT_GLSL),
     });
     staticsMesh = new THREE.Mesh(geo, smat);
     staticsMesh.frustumCulled = false;

@@ -8,7 +8,7 @@ The viewer reproduces that exactly on top of the 3D terrain.
 Usage:
   python3 export_statics.py --uo "C:/Games/Ascension UO" --facet 0 \
       --region 1220,1390,512,512 --out out/britain
-Writes statics_pages_<n>.png, statics_sprites.json and statics_data.json.
+Writes statics_page_<n>.png, statics_sprites.json, statics_data.json and lights.json.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import argparse
 import base64
 import json
 import os
+import re
 
 import numpy as np
 from PIL import Image
@@ -25,6 +26,9 @@ from uofiles import (S_BACKGROUND, S_NODIAGONAL, S_SURFACE, UOData, load_static_
                      load_statics, static_art)
 
 PAGE = 2048
+# Statics that give off light at night. The tiledata LightSource flag is set on
+# windows and arrow loops too, so go by name instead.
+LIGHT_NAMES = re.compile(r"torch|sconce|lamp|lantern|brazier|candle|campfire|fire|forge|candelabra|hearth")
 NEVER_DRAWN = {0x0001, 0x21BC, 0xA1FE, 0xA1FF, 0xA200, 0xA201} | set(range(0x2198, 0x21A5))
 
 
@@ -100,6 +104,10 @@ def main() -> None:
     with open(os.path.join(args.out, "statics_data.json"), "w") as f:
         json.dump({"format": "slot u16, x i16, y i16, z i8, prio u8, hue u16", "count": int(len(rec)),
                    "base64": base64.b64encode(rec.tobytes()).decode("ascii")}, f)
+    lit = np.array([bool(LIGHT_NAMES.search(tiles[int(g)].name.lower())) for g in st["id"]], dtype=bool)
+    lights = [[int(x), int(y), int(z)] for x, y, z in zip(rec["x"][lit], rec["y"][lit], rec["z"][lit])]
+    with open(os.path.join(args.out, "lights.json"), "w") as f:
+        json.dump({"format": "x, y (region-relative), z", "lights": lights}, f)
     with open(os.path.join(args.out, "statics_sprites.json"), "w") as f:
         json.dump({"page_px": PAGE, "pages": len(pages),
                    "sprites": [[g] + sprites[g] for g in sorted(sprites)]}, f)
