@@ -14,11 +14,15 @@ Writes into --out:
   manifest.json       sizes, scale, origin, file list, source files
   viewer_data.bin     compact data the browser viewer reads (+ viewer_data.json, base64)
   viewer_tiles.json   atlas slot -> [tile id, name, flags]
+  vertex_class.png    (with --classes) dominant terrain class per vertex
+  weights/<class>.png (with --classes) 8-bit layer weight maps, Unreal landscape layers
+  materials.jpg       (with --materials) one 256 px layer per class, modern look
 """
 
 from __future__ import annotations
 
 import argparse
+import collections
 import csv
 import json
 import os
@@ -38,6 +42,96 @@ def save_r16(path: str, arr: np.ndarray) -> None:
     Image.fromarray(arr.astype(np.uint16)).save(path)
 
 
+# Fixed class order: index = value in vertex_class.png and layer in materials.
+CLASS_ORDER = ["void", "water", "grass", "forest", "jungle", "dirt", "furrows", "sand", "seabed",
+               "rock", "cave", "snow", "swamp", "paved", "wood_floor", "obsidian", "lava", "acid", "unknown"]
+SOLID = {"void": (12, 11, 10), "water": (28, 62, 92), "lava": (200, 80, 20), "acid": (90, 160, 40),
+         "unknown": (128, 128, 128)}
+MAT_PX = 256
+
+
+_UO = None
+
+
+def class_colour(tiles: list) -> np.ndarray | None:
+    """Average colour of a class's pure tiles, weighted by how often they are used."""
+    if not tiles or _UO is None:
+        return None
+    acc, n = np.zeros(3), 0
+    for t, cells in sorted(tiles, key=lambda x: -x[1])[:8]:
+        art = _UO.land_art(t)
+        if art is None:
+            continue
+        sq = diamond_to_square(art, TILE_PX)
+        acc += sq[..., :3].reshape(-1, 3).mean(0) * cells
+        n += cells
+    return acc / n if n else None
+
+
+def export_blend(args, rid: np.ndarray, land) -> dict:
+    """Per-vertex terrain class (for the viewer) and per-class weight maps (for
+    Unreal landscape layers). Vertex (x, y) is corner N of tile (x, y), E of
+    tile (x-1, y), S of tile (x-1, y-1) and W of tile (x, y-1)."""
+    ci = {c: i for i, c in enumerate(CLASS_ORDER)}
+    corner = {}
+    pure_of = collections.defaultdict(list)  # class -> pure tile ids, for colour matching
+    with open(args.classes) as f:
+        for r in csv.DictReader(f):
+            t = int(r["tile_id"])
+            if r["kind"] == "pure":
+                pure_of[r["class"]].append((t, int(r["cells"])))
+            cls = [r[k] or r["class"] for k in ("corner_N", "corner_E", "corner_S", "corner_W")]
+            if land[t].is_wet:
+                cls = ["water"] * 4
+            corner[t] = [ci.get(c, ci["unknown"]) for c in cls]
+    lut = np.full((0x10000, 4), ci["unknown"], dtype=np.uint8)
+    for t, c in corner.items():
+        lut[t] = c
+    tc = lut[rid]  # [h, w, 4] corner classes per tile: N, E, S, W
+    h, w = rid.shape
+    votes = np.zeros((h + 1, w + 1, len(CLASS_ORDER)), dtype=np.uint8)
+    ys, xs = np.mgrid[0:h, 0:w]
+    for k, (dy, dx) in enumerate(((0, 0), (0, 1), (1, 1), (1, 0))):  # N, E, S, W -> vertex offsets
+        np.add.at(votes, (ys + dy, xs + dx, tc[..., k]), 1)
+    n = votes.sum(-1, keepdims=True).clip(min=1)
+    weights = votes.astype(np.float32) / n
+    vclass = weights.argmax(-1).astype(np.uint8)
+    Image.fromarray(vclass).save(os.path.join(args.out, "vertex_class.png"))
+
+    wdir = os.path.join(args.out, "weights")
+    os.makedirs(wdir, exist_ok=True)
+    layers = []
+    for i, c in enumerate(CLASS_ORDER):
+        if weights[..., i].max() > 0:
+            Image.fromarray((weights[..., i] * 255).round().astype(np.uint8)).save(os.path.join(wdir, f"{c}.png"))
+            layers.append(c)
+
+    info = {"vertex_class": "vertex_class.png", "class_order": CLASS_ORDER, "weight_maps": {c: f"weights/{c}.png" for c in layers}}
+    if args.materials:
+        strip = np.zeros((MAT_PX * len(CLASS_ORDER), MAT_PX, 3), dtype=np.uint8)
+        for i, c in enumerate(CLASS_ORDER):
+            p = os.path.join(args.materials, f"{c}.jpg")
+            if os.path.exists(p):
+                im = np.array(Image.open(p).convert("RGB").resize((MAT_PX, MAT_PX), Image.LANCZOS))
+                target = class_colour(pure_of.get(c, []))
+                if target is not None and args.match_colours:
+                    # Pull the photo's average colour toward UO's own colour for this terrain,
+                    # so the modern look keeps Britannia's palette.
+                    mean = im.reshape(-1, 3).mean(0)
+                    gain = np.clip(target / np.maximum(mean, 1), 0.4, 2.5)
+                    gain = 1 + args.match_colours * (gain - 1)
+                    im = np.clip(im * gain, 0, 255).astype(np.uint8)
+            else:
+                im = np.zeros((MAT_PX, MAT_PX, 3), np.uint8) + np.array(SOLID.get(c, SOLID["unknown"]), np.uint8)
+            strip[i * MAT_PX:(i + 1) * MAT_PX] = im
+        Image.fromarray(strip).save(os.path.join(args.out, "materials.jpg"), quality=88)
+        info["materials"] = {"file": "materials.jpg", "layer_px": MAT_PX}
+        src = os.path.join(args.materials, "sources.json")
+        if os.path.exists(src):
+            info["materials"]["sources"] = json.load(open(src))
+    return info
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--uo", required=True)
@@ -45,10 +139,16 @@ def main() -> None:
     ap.add_argument("--region", default=None, help="x,y,w,h in cells; default whole facet")
     ap.add_argument("--out", required=True)
     ap.add_argument("--diffs", action="store_true", help="apply mapdifl/mapdif (off: map file as-is)")
+    ap.add_argument("--classes", default=None, help="tile_classes.csv from classify_tiles.py: adds blend maps")
+    ap.add_argument("--materials", default=None, help="folder of <class>.jpg textures for the modern look")
+    ap.add_argument("--match-colours", type=float, default=0.8,
+                    help="0..1, how far to pull each material's average colour to UO's colour for that terrain")
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
     uo = UOData(args.uo)
+    global _UO
+    _UO = uo
     ids, zs, diff_count = uo.load_map(args.facet, apply_diffs=args.diffs)
     land = uo.load_land_tiledata()
     fw, fh = MAP_SIZES[args.facet]
@@ -137,6 +237,11 @@ def main() -> None:
     with open(os.path.join(args.out, "viewer_tiles.json"), "w") as f:
         json.dump([[int(t), land[int(t)].name, slot_flags(int(t))] for t in used], f)
 
+    # 5. Terrain classes per vertex, from the decoded tile corners.
+    blend = None
+    if args.classes:
+        blend = export_blend(args, rid, land)
+
     manifest = {
         "facet": args.facet,
         "facet_size": [fw, fh],
@@ -153,6 +258,8 @@ def main() -> None:
         "z_range": [int(vz.min()), int(vz.max())],
         "source": os.path.abspath(args.uo),
     }
+    if blend:
+        manifest["blend"] = blend
     with open(os.path.join(args.out, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2)
     print(json.dumps(manifest, indent=2))

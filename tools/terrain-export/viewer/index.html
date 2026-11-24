@@ -74,6 +74,7 @@
     <div class="seg" role="group" aria-label="Texture source">
       <button id="modeArt" aria-pressed="true">Tile art</button>
       <button id="modeTex" aria-pressed="false">Texmaps</button>
+      <button id="modeMod" aria-pressed="false">Modern</button>
     </div>
   </div>
   <div class="row">
@@ -85,6 +86,7 @@
   <details>
     <summary>How to move</summary>
     <p>Drag to orbit, right-drag or two fingers to pan, scroll to zoom. Click the ground to read that tile.</p>
+    <p>Modern uses CC0 textures from Poly Haven, blended across tile corners from the decoded terrain classes.</p>
   </details>
 </section>
 
@@ -144,6 +146,7 @@ async function main() {
     loadImageRGBA('atlas_texmap.png'),
     fetch('manifest.json').then(r => r.json()),
   ]);
+  const [matImg, vclassImg] = await Promise.all([loadImageRGBA('materials.jpg'), loadImageRGBA('vertex_class.png')]);
 
   const dv = new DataView(buf);
   const W = dv.getUint32(4, true), H = dv.getUint32(8, true);
@@ -214,6 +217,18 @@ async function main() {
   flagTex.minFilter = flagTex.magFilter = THREE.NearestFilter;
   flagTex.needsUpdate = true;
 
+  const classOrder = manifest.blend.class_order;
+  const vclass = new Uint8Array(VW * VH);
+  for (let i = 0; i < VW * VH; i++) vclass[i] = vclassImg.data[i * 4];
+  const vclassTex = new THREE.DataTexture(vclass, VW, VH, THREE.RedIntegerFormat, THREE.UnsignedByteType);
+  vclassTex.internalFormat = 'R8UI';
+  vclassTex.minFilter = vclassTex.magFilter = THREE.NearestFilter;
+  vclassTex.needsUpdate = true;
+  const MP = manifest.blend.materials.layer_px;
+  const matArr = atlasToArray(matImg, classOrder.length, 1, MP);
+  matArr.wrapS = matArr.wrapT = THREE.RepeatWrapping;
+  const waterIdx = classOrder.indexOf('water');
+
   const S = manifest.atlas.slot_px;
   const artArr = atlasToArray(artImg, nSlots, cols, S);
   const texArr = atlasToArray(texImg, nSlots, cols, S);
@@ -224,6 +239,7 @@ async function main() {
       uArt: { value: artArr }, uTex: { value: texArr },
       uSlots: { value: slotTex }, uFlags: { value: flagTex },
       uSize: { value: new THREE.Vector2(W, H) }, uCell: { value: cellM },
+      uVClass: { value: vclassTex }, uMat: { value: matArr }, uWater: { value: waterIdx },
       uMode: { value: 0 }, uGrid: { value: 0 }, uTime: { value: 0 },
       uSun: { value: new THREE.Vector3(-0.45, 0.8, -0.4).normalize() },
     },
@@ -239,9 +255,36 @@ async function main() {
       in vec3 vPos; in vec3 vNormal;
       uniform sampler2DArray uArt; uniform sampler2DArray uTex;
       uniform usampler2D uSlots; uniform usampler2D uFlags;
+      uniform usampler2D uVClass; uniform sampler2DArray uMat; uniform int uWater;
       uniform vec2 uSize; uniform float uCell; uniform int uMode; uniform int uGrid;
       uniform float uTime; uniform vec3 uSun;
       out vec4 outColor;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+      }
+      // Modern look: blend the four corner classes of this cell, with noise so borders are not straight.
+      vec3 modern(vec2 c, out float wet) {
+        vec2 jitter = vec2(vnoise(c * 0.8), vnoise(c * 0.8 + 31.0)) - 0.5;
+        jitter += 0.5 * (vec2(vnoise(c * 2.3 + 7.0), vnoise(c * 2.3 + 53.0)) - 0.5);
+        vec2 cc = c + jitter * 0.7;
+        ivec2 v0 = clamp(ivec2(floor(cc)), ivec2(0), ivec2(uSize) - 1);
+        vec2 f = smoothstep(0.15, 0.85, fract(cc));
+        int k00 = int(texelFetch(uVClass, v0, 0).r);
+        int k10 = int(texelFetch(uVClass, v0 + ivec2(1, 0), 0).r);
+        int k01 = int(texelFetch(uVClass, v0 + ivec2(0, 1), 0).r);
+        int k11 = int(texelFetch(uVClass, v0 + ivec2(1, 1), 0).r);
+        vec2 uv = vPos.xz / 4.0;  // textures repeat every 4 m
+        vec2 gx = dFdx(uv), gy = dFdy(uv);
+        float w00 = (1.0 - f.x) * (1.0 - f.y), w10 = f.x * (1.0 - f.y), w01 = (1.0 - f.x) * f.y, w11 = f.x * f.y;
+        vec3 col = w00 * textureGrad(uMat, vec3(uv, float(k00)), gx, gy).rgb
+                 + w10 * textureGrad(uMat, vec3(uv, float(k10)), gx, gy).rgb
+                 + w01 * textureGrad(uMat, vec3(uv, float(k01)), gx, gy).rgb
+                 + w11 * textureGrad(uMat, vec3(uv, float(k11)), gx, gy).rgb;
+        wet = (k00 == uWater ? w00 : 0.0) + (k10 == uWater ? w10 : 0.0) + (k01 == uWater ? w01 : 0.0) + (k11 == uWater ? w11 : 0.0);
+        return col;
+      }
       void main() {
         vec2 c = vPos.xz / uCell;
         ivec2 ci = clamp(ivec2(floor(c)), ivec2(0), ivec2(uSize) - 1);
@@ -250,12 +293,20 @@ async function main() {
         vec2 f = fract(c);
         vec2 dx = dFdx(c), dy = dFdy(c);
         vec3 uvw = vec3(f, float(slot));
-        vec3 col = (uMode == 0 ? textureGrad(uArt, uvw, dx, dy) : textureGrad(uTex, uvw, dx, dy)).rgb;
-        if ((fl & 2u) != 0u) col = vec3(0.09, 0.08, 0.07);
+        vec3 col;
+        float mwet = 0.0;
+        if (uMode == 2) col = modern(c, mwet);
+        else col = (uMode == 0 ? textureGrad(uArt, uvw, dx, dy) : textureGrad(uTex, uvw, dx, dy)).rgb;
+        if ((fl & 2u) != 0u && uMode != 2) col = vec3(0.09, 0.08, 0.07);
         vec3 n = normalize(vNormal);
         float lambert = max(dot(n, uSun), 0.0);
         float light = 0.62 + 0.55 * lambert;
-        if ((fl & 1u) != 0u) {
+        if (uMode == 2 && mwet > 0.0) {
+          float w = sin(c.x * 1.7 + uTime * 1.3) * sin(c.y * 1.3 - uTime * 0.9);
+          vec3 waterCol = vec3(0.11, 0.25, 0.36) * (1.0 + 0.08 * w) + 0.05 * pow(max(dot(reflect(-uSun, vec3(0, 1, 0)), normalize(cameraPosition - vPos)), 0.0), 24.0);
+          col = mix(col * light, waterCol, mwet);
+          light = 1.0;
+        } else if ((fl & 1u) != 0u && uMode != 2) {
           float w = sin(c.x * 1.7 + uTime * 1.3) * sin(c.y * 1.3 - uTime * 0.9);
           col *= 1.0 + 0.06 * w;
           light = 0.85 + 0.15 * lambert;
@@ -319,9 +370,11 @@ async function main() {
     mat.uniforms.uMode.value = m;
     $('modeArt').setAttribute('aria-pressed', String(m === 0));
     $('modeTex').setAttribute('aria-pressed', String(m === 1));
+    $('modeMod').setAttribute('aria-pressed', String(m === 2));
   };
   $('modeArt').onclick = () => setMode(0);
   $('modeTex').onclick = () => setMode(1);
+  $('modeMod').onclick = () => setMode(2);
   $('hscale').oninput = (e) => { hScale = +e.target.value; $('hval').textContent = hScale.toFixed(1) + '×'; applyHeights(); };
   $('smooth').onchange = (e) => { useSmooth = e.target.checked; applyHeights(); };
   $('grid').onchange = (e) => { mat.uniforms.uGrid.value = e.target.checked ? 1 : 0; };
@@ -343,7 +396,8 @@ async function main() {
     const z = zRaw[cy * VW + cx];
     $('readout').innerHTML =
       `<b>X</b> ${R.x + cx}  <b>Y</b> ${R.y + cy}  <b>Z</b> ${z}<br>` +
-      `<b>Tile</b> 0x${t[0].toString(16).toUpperCase().padStart(4, '0')} · ${t[1] || 'unnamed'}${t[2] & 1 ? ' · wet' : ''}${t[2] & 2 ? ' · not drawn' : ''}`;
+      `<b>Tile</b> 0x${t[0].toString(16).toUpperCase().padStart(4, '0')} · ${t[1] || 'unnamed'}${t[2] & 1 ? ' · wet' : ''}${t[2] & 2 ? ' · not drawn' : ''}<br>` +
+      `<b>Terrain</b> ${classOrder[vclass[cy * VW + cx]].replace('_', ' ')}`;
   });
 }
 
