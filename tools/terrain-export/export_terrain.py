@@ -47,8 +47,16 @@ CLASS_ORDER = ["void", "water", "grass", "forest", "jungle", "dirt", "furrows", 
                "rock", "cave", "snow", "swamp", "paved", "wood_floor", "obsidian", "lava", "acid", "unknown"]
 SOLID = {"void": (12, 11, 10), "water": (28, 62, 92), "lava": (200, 80, 20), "acid": (90, 160, 40),
          "unknown": (128, 128, 128)}
-MAT_TILES = 4           # one material layer covers 4 x 4 tiles, aligned to the tile grid
+MAT_TILES = 8           # one material layer covers 8 x 8 tiles, aligned to the tile grid
 MAT_PX = 64 * MAT_TILES # 64 px per tile, the density of UO's own texmaps
+# How many tiles one copy of each photo covers (1, 2, 4 or 8, so copies stay on
+# the tile grid). Picked by eye so stones, planks, blades and pebbles come out
+# the same size as on UO's own texmap for that terrain, e.g. about five
+# cobbles across a paved tile. Not the photos' real-world size: UO draws
+# ground detail bigger than life.
+TILES_PER_PHOTO = {"grass": 2, "forest": 2, "jungle": 2, "dirt": 2, "furrows": 2, "sand": 4,
+                   "seabed": 2, "rock": 4, "cave": 2, "snow": 4, "swamp": 2, "paved": 2,
+                   "wood_floor": 1, "obsidian": 2}
 # Terrains with no good photo: use UO's own texmap for them.
 UO_ONLY = {"lava", "acid", "water", "void", "unknown"}
 # Blend priority, low to high: where two terrains meet, the higher one paints over
@@ -164,7 +172,9 @@ def export_blend(args, rid: np.ndarray, land) -> dict:
             ref = class_reference(pure_of.get(c, []), land)
             p = os.path.join(args.materials, f"{c}.jpg")
             if os.path.exists(p) and c not in UO_ONLY:
-                im = np.array(Image.open(p).convert("RGB").resize((MAT_PX, MAT_PX), Image.LANCZOS))
+                n = TILES_PER_PHOTO.get(c, MAT_TILES)
+                im = np.array(Image.open(p).convert("RGB").resize((64 * n, 64 * n), Image.LANCZOS))
+                im = np.tile(im, (MAT_TILES // n, MAT_TILES // n, 1))
                 if ref is not None and args.match_colours:
                     # Match each channel's whole distribution (brightness AND contrast) to
                     # UO's own texmaps for this terrain, so the photo takes Britannia's palette.
@@ -178,6 +188,7 @@ def export_blend(args, rid: np.ndarray, land) -> dict:
             strip[i * MAT_PX:(i + 1) * MAT_PX] = im.astype(np.uint8)
         Image.fromarray(strip).save(os.path.join(args.out, "materials.png"), optimize=True)
         info["materials"] = {"file": "materials.png", "layer_px": MAT_PX, "tiles_per_layer": MAT_TILES,
+                             "tiles_per_photo": {c: TILES_PER_PHOTO[c] for c in CLASS_ORDER if c in TILES_PER_PHOTO},
                              "priority": PRIORITY}
         src = os.path.join(args.materials, "sources.json")
         if os.path.exists(src):
