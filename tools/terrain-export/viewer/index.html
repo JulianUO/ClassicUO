@@ -1,0 +1,354 @@
+<title>Britain Terrain Viewer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+  /* Layout: full-bleed 3D canvas, one parchment-dark control card floating top-left, a tile readout bottom-left. Single dark look by choice. */
+  :root {
+    --ground: #12100d;
+    --panel: rgba(24, 21, 17, 0.86);
+    --line: #3a332a;
+    --ink: #ece4d4;
+    --muted: #a99d88;
+    --gold: #d2a54b;
+    --display: "Cinzel", "Trajan Pro", Georgia, serif;
+    --body: "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  [hidden] { display: none !important; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--body); overflow: hidden; }
+  #view { position: fixed; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+  .card {
+    position: fixed; z-index: 2;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  #controls {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    left: max(16px, env(safe-area-inset-left, 0px));
+    width: min(290px, calc(100vw - 32px));
+    padding: 14px 16px; display: grid; gap: 12px;
+  }
+  h1 { margin: 0; font-family: var(--display); font-size: 17px; letter-spacing: 0.04em; color: var(--gold); font-weight: 600; text-wrap: balance; }
+  .sub { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .row { display: grid; gap: 6px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button {
+    flex: 1; padding: 7px 8px; background: transparent; color: var(--ink); border: 0;
+    font: 500 12.5px var(--body); cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--gold); color: #1b150c; }
+  .seg button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+  .check input { accent-color: var(--gold); }
+  input[type=range] { width: 100%; accent-color: var(--gold); }
+  .rangehead { display: flex; justify-content: space-between; align-items: baseline; }
+  .val { font-family: var(--mono); font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  details summary { font-size: 12px; color: var(--muted); cursor: pointer; }
+  details p { font-size: 12px; color: var(--muted); margin: 6px 0 0; line-height: 1.45; }
+  #readout {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    left: max(16px, env(safe-area-inset-left, 0px));
+    padding: 10px 14px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5;
+    max-width: calc(100vw - 32px); font-variant-numeric: tabular-nums;
+  }
+  #readout b { color: var(--gold); font-weight: 400; }
+  #status { position: fixed; inset: 0; display: grid; place-items: center; font-family: var(--display); color: var(--muted); letter-spacing: 0.06em; z-index: 1; pointer-events: none; }
+  @media (max-width: 520px) { #controls { padding: 12px; gap: 10px; } details { display: none; } }
+</style>
+
+<canvas id="view" aria-label="3D terrain of Britain, Felucca"></canvas>
+<div id="status">Loading Britain…</div>
+
+<section class="card" id="controls" aria-label="Viewer controls">
+  <div>
+    <h1>Britain · Felucca</h1>
+    <p class="sub" id="regionline">Land only, no statics</p>
+  </div>
+  <div class="row">
+    <span class="label">Textures</span>
+    <div class="seg" role="group" aria-label="Texture source">
+      <button id="modeArt" aria-pressed="true">Tile art</button>
+      <button id="modeTex" aria-pressed="false">Texmaps</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="rangehead"><span class="label">Height scale</span><span class="val" id="hval">1.0×</span></div>
+    <input id="hscale" type="range" min="0.5" max="3" step="0.1" value="1" aria-label="Height scale">
+  </div>
+  <label class="check"><input id="smooth" type="checkbox"> Smooth heights</label>
+  <label class="check"><input id="grid" type="checkbox"> Show tile grid</label>
+  <details>
+    <summary>How to move</summary>
+    <p>Drag to orbit, right-drag or two fingers to pan, scroll to zoom. Click the ground to read that tile.</p>
+  </details>
+</section>
+
+<div class="card" id="readout" aria-live="polite">Click the ground to read a tile</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const $ = (id) => document.getElementById(id);
+
+async function loadImageRGBA(url) {
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0);
+  return g.getImageData(0, 0, img.width, img.height);
+}
+
+// Re-pack an atlas grid (cols x rows of S px slots) into a texture array.
+function atlasToArray(imgData, slots, cols, S) {
+  const out = new Uint8Array(S * S * 4 * slots);
+  const W = imgData.width, src = imgData.data;
+  for (let i = 0; i < slots; i++) {
+    const ox = (i % cols) * S, oy = Math.floor(i / cols) * S;
+    for (let y = 0; y < S; y++) {
+      const s = ((oy + y) * W + ox) * 4;
+      out.set(src.subarray(s, s + S * 4), (i * S * S + y * S) * 4);
+    }
+  }
+  const t = new THREE.DataArrayTexture(out, S, S, slots);
+  t.format = THREE.RGBAFormat;
+  t.type = THREE.UnsignedByteType;
+  // Sample the sRGB bytes as-is and light them directly; the output is written as sRGB.
+  t.colorSpace = THREE.NoColorSpace;
+  t.generateMipmaps = true;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+}
+
+async function main() {
+  const [buf, tiles, artImg, texImg, manifest] = await Promise.all([
+    fetch('viewer_data.json').then(r => r.json()).then(j => Uint8Array.from(atob(j.base64), c => c.charCodeAt(0)).buffer),
+    fetch('viewer_tiles.json').then(r => r.json()),
+    loadImageRGBA('atlas.png'),
+    loadImageRGBA('atlas_texmap.png'),
+    fetch('manifest.json').then(r => r.json()),
+  ]);
+
+  const dv = new DataView(buf);
+  const W = dv.getUint32(4, true), H = dv.getUint32(8, true);
+  const nSlots = dv.getUint32(12, true), cols = dv.getUint32(16, true);
+  const cellM = dv.getFloat32(20, true), zM = dv.getFloat32(24, true);
+  let off = 28;
+  const VW = W + 1, VH = H + 1;
+  const zRaw = new Int8Array(buf.slice(off, off + VW * VH)); off += VW * VH;
+  const slots = new Uint16Array(buf.slice(off, off + W * H * 2)); off += W * H * 2;
+
+  const R = manifest.region;
+  $('regionline').textContent = `Cells ${R.x}–${R.x + R.w}, ${R.y}–${R.y + R.h} · 1 cell = ${cellM} m · land only`;
+
+  // Heights: raw and a smoothed copy (3x3 average, a stand-in for the client's 9-edge softening).
+  const zSmooth = new Float32Array(VW * VH);
+  for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
+    let s = 0, n = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= VW || yy >= VH) continue;
+      s += zRaw[yy * VW + xx]; n++;
+    }
+    zSmooth[y * VW + x] = s / n;
+  }
+
+  // Geometry: one vertex per cell corner. Tile (x, y) spans vertices (x, y)..(x+1, y+1).
+  const pos = new Float32Array(VW * VH * 3);
+  for (let y = 0; y < VH; y++) for (let x = 0; x < VW; x++) {
+    const i = (y * VW + x) * 3;
+    pos[i] = x * cellM; pos[i + 2] = y * cellM;
+  }
+  const idx = new Uint32Array(W * H * 6);
+  let k = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const a = y * VW + x, b = a + 1, c = a + VW, d = c + 1;
+    // Split along the diagonal with the smaller height difference.
+    if (Math.abs(zRaw[a] - zRaw[d]) <= Math.abs(zRaw[b] - zRaw[c])) {
+      idx.set([a, c, d, a, d, b], k);
+    } else {
+      idx.set([a, c, b, b, c, d], k);
+    }
+    k += 6;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+
+  let hScale = 1, useSmooth = false;
+  function applyHeights() {
+    const src = useSmooth ? zSmooth : zRaw;
+    for (let i = 0; i < VW * VH; i++) pos[i * 3 + 1] = src[i] * zM * hScale;
+    geo.attributes.position.needsUpdate = true;
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+    geo.computeBoundingBox();
+  }
+  applyHeights();
+
+  const slotTex = new THREE.DataTexture(slots, W, H, THREE.RedIntegerFormat, THREE.UnsignedShortType);
+  slotTex.internalFormat = 'R16UI';
+  slotTex.minFilter = slotTex.magFilter = THREE.NearestFilter;
+  slotTex.needsUpdate = true;
+
+  const flags = new Uint8Array(nSlots);
+  tiles.forEach((t, i) => { flags[i] = t[2]; });
+  const flagTex = new THREE.DataTexture(flags, nSlots, 1, THREE.RedIntegerFormat, THREE.UnsignedByteType);
+  flagTex.internalFormat = 'R8UI';
+  flagTex.minFilter = flagTex.magFilter = THREE.NearestFilter;
+  flagTex.needsUpdate = true;
+
+  const S = manifest.atlas.slot_px;
+  const artArr = atlasToArray(artImg, nSlots, cols, S);
+  const texArr = atlasToArray(texImg, nSlots, cols, S);
+
+  const mat = new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL3,
+    uniforms: {
+      uArt: { value: artArr }, uTex: { value: texArr },
+      uSlots: { value: slotTex }, uFlags: { value: flagTex },
+      uSize: { value: new THREE.Vector2(W, H) }, uCell: { value: cellM },
+      uMode: { value: 0 }, uGrid: { value: 0 }, uTime: { value: 0 },
+      uSun: { value: new THREE.Vector3(-0.45, 0.8, -0.4).normalize() },
+    },
+    vertexShader: /* glsl */`
+      out vec3 vPos; out vec3 vNormal;
+      void main() {
+        vPos = position; vNormal = normal;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      precision highp float; precision highp int;
+      precision highp sampler2DArray; precision highp usampler2D;
+      in vec3 vPos; in vec3 vNormal;
+      uniform sampler2DArray uArt; uniform sampler2DArray uTex;
+      uniform usampler2D uSlots; uniform usampler2D uFlags;
+      uniform vec2 uSize; uniform float uCell; uniform int uMode; uniform int uGrid;
+      uniform float uTime; uniform vec3 uSun;
+      out vec4 outColor;
+      void main() {
+        vec2 c = vPos.xz / uCell;
+        ivec2 ci = clamp(ivec2(floor(c)), ivec2(0), ivec2(uSize) - 1);
+        uint slot = texelFetch(uSlots, ci, 0).r;
+        uint fl = texelFetch(uFlags, ivec2(int(slot), 0), 0).r;
+        vec2 f = fract(c);
+        vec2 dx = dFdx(c), dy = dFdy(c);
+        vec3 uvw = vec3(f, float(slot));
+        vec3 col = (uMode == 0 ? textureGrad(uArt, uvw, dx, dy) : textureGrad(uTex, uvw, dx, dy)).rgb;
+        if ((fl & 2u) != 0u) col = vec3(0.09, 0.08, 0.07);
+        vec3 n = normalize(vNormal);
+        float lambert = max(dot(n, uSun), 0.0);
+        float light = 0.62 + 0.55 * lambert;
+        if ((fl & 1u) != 0u) {
+          float w = sin(c.x * 1.7 + uTime * 1.3) * sin(c.y * 1.3 - uTime * 0.9);
+          col *= 1.0 + 0.06 * w;
+          light = 0.85 + 0.15 * lambert;
+        }
+        col *= light;
+        if (uGrid == 1) {
+          vec2 g = abs(f - 0.5);
+          vec2 fw = fwidth(c);
+          float edge = 1.0 - smoothstep(0.0, 1.2, min((0.5 - g.x) / fw.x, (0.5 - g.y) / fw.y));
+          col = mix(col, vec3(0.0), edge * 0.45);
+        }
+        // Distance haze toward the ground colour.
+        float fog = smoothstep(700.0, 1600.0, length(cameraPosition - vPos));
+        col = mix(col, vec3(0.07, 0.063, 0.05), fog);
+        outColor = vec4(col, 1.0);
+      }`,
+  });
+  mat.extensions = { derivatives: true };
+
+  const canvas = $('view');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x12100d);
+  const mesh = new THREE.Mesh(geo, mat);
+  scene.add(mesh);
+
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 5000);
+  // Britain's castle and town sit near cells (1325..1500, 1600..1720).
+  const focusCell = new THREE.Vector2(1480 - R.x, 1640 - R.y);
+  const target = new THREE.Vector3(focusCell.x * cellM, 2, focusCell.y * cellM);
+  // Start from the south-east, the way the classic client looks at the world.
+  camera.position.set(target.x + 210, 230, target.z + 210);
+  const controls = new OrbitControls(camera, canvas);
+  controls.target.copy(target);
+  controls.enableDamping = true;
+  controls.maxPolarAngle = Math.PI * 0.49;
+  controls.minDistance = 8;
+  controls.maxDistance = 1400;
+  controls.update();
+
+  function resize() {
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  addEventListener('resize', resize); resize();
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const clock = new THREE.Clock();
+  renderer.setAnimationLoop(() => {
+    if (!reduce) mat.uniforms.uTime.value = clock.getElapsedTime();
+    controls.update();
+    renderer.render(scene, camera);
+  });
+  $('status').hidden = true;
+
+  // Controls
+  const setMode = (m) => {
+    mat.uniforms.uMode.value = m;
+    $('modeArt').setAttribute('aria-pressed', String(m === 0));
+    $('modeTex').setAttribute('aria-pressed', String(m === 1));
+  };
+  $('modeArt').onclick = () => setMode(0);
+  $('modeTex').onclick = () => setMode(1);
+  $('hscale').oninput = (e) => { hScale = +e.target.value; $('hval').textContent = hScale.toFixed(1) + '×'; applyHeights(); };
+  $('smooth').onchange = (e) => { useSmooth = e.target.checked; applyHeights(); };
+  $('grid').onchange = (e) => { mat.uniforms.uGrid.value = e.target.checked ? 1 : 0; };
+
+  // Click to read a tile.
+  const ray = new THREE.Raycaster();
+  let down = null;
+  canvas.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
+  canvas.addEventListener('pointerup', (e) => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return;
+    const p = new THREE.Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    ray.setFromCamera(p, camera);
+    const hit = ray.intersectObject(mesh)[0];
+    if (!hit) return;
+    const cx = Math.min(W - 1, Math.max(0, Math.floor(hit.point.x / cellM)));
+    const cy = Math.min(H - 1, Math.max(0, Math.floor(hit.point.z / cellM)));
+    const s = slots[cy * W + cx];
+    const t = tiles[s];
+    const z = zRaw[cy * VW + cx];
+    $('readout').innerHTML =
+      `<b>X</b> ${R.x + cx}  <b>Y</b> ${R.y + cy}  <b>Z</b> ${z}<br>` +
+      `<b>Tile</b> 0x${t[0].toString(16).toUpperCase().padStart(4, '0')} · ${t[1] || 'unnamed'}${t[2] & 1 ? ' · wet' : ''}${t[2] & 2 ? ' · not drawn' : ''}`;
+  });
+}
+
+main().catch((err) => {
+  $('status').textContent = 'Could not load the terrain data: ' + err.message;
+  console.error(err);
+});
+</script>
