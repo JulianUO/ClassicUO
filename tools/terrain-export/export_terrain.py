@@ -14,7 +14,7 @@ Writes into --out:
   manifest.json       sizes, scale, origin, file list, source files
   viewer_data.bin     compact data the browser viewer reads (+ viewer_data.json, base64)
   viewer_tiles.json   atlas slot -> [tile id, name, flags]
-  vertex_class.png    (with --classes) dominant terrain class per vertex
+  vertex_class.png    (with --classes) per vertex: R main class, G second class, B its weight
   weights/<class>.png (with --classes) 8-bit layer weight maps, Unreal landscape layers
   materials.jpg       (with --materials) one 256 px layer per class, modern look
 """
@@ -93,10 +93,19 @@ def export_blend(args, rid: np.ndarray, land) -> dict:
     ys, xs = np.mgrid[0:h, 0:w]
     for k, (dy, dx) in enumerate(((0, 0), (0, 1), (1, 1), (1, 0))):  # N, E, S, W -> vertex offsets
         np.add.at(votes, (ys + dy, xs + dx, tc[..., k]), 1)
+    # Tiles the client never draws (void, NODRAW) only win a vertex no real terrain touches.
+    vi = ci["void"]
+    has_other = (votes.sum(-1) - votes[..., vi]) > 0
+    votes[..., vi] = np.where(has_other, 0, votes[..., vi])
     n = votes.sum(-1, keepdims=True).clip(min=1)
     weights = votes.astype(np.float32) / n
-    vclass = weights.argmax(-1).astype(np.uint8)
-    Image.fromarray(vclass).save(os.path.join(args.out, "vertex_class.png"))
+    # Top two classes per vertex: R = main class, G = second class, B = second's weight.
+    order = np.argsort(-weights, axis=-1, kind="stable")
+    c1, c2 = order[..., 0], order[..., 1]
+    w2 = np.take_along_axis(weights, c2[..., None], -1)[..., 0]
+    c2 = np.where(w2 > 0, c2, c1)
+    vclass = np.stack([c1, c2, (w2 * 255).round()], -1).astype(np.uint8)
+    Image.fromarray(vclass, "RGB").save(os.path.join(args.out, "vertex_class.png"))
 
     wdir = os.path.join(args.out, "weights")
     os.makedirs(wdir, exist_ok=True)
@@ -106,7 +115,7 @@ def export_blend(args, rid: np.ndarray, land) -> dict:
             Image.fromarray((weights[..., i] * 255).round().astype(np.uint8)).save(os.path.join(wdir, f"{c}.png"))
             layers.append(c)
 
-    info = {"vertex_class": "vertex_class.png", "class_order": CLASS_ORDER, "weight_maps": {c: f"weights/{c}.png" for c in layers}}
+    info = {"vertex_class": "vertex_class.png", "vertex_class_encoding": "R=class, G=second class, B=second weight*255", "class_order": CLASS_ORDER, "weight_maps": {c: f"weights/{c}.png" for c in layers}}
     if args.materials:
         strip = np.zeros((MAT_PX * len(CLASS_ORDER), MAT_PX, 3), dtype=np.uint8)
         for i, c in enumerate(CLASS_ORDER):

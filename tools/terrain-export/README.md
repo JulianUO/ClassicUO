@@ -40,3 +40,21 @@ python3 export_terrain.py --uo "C:/Games/Ascension UO" --facet 0 \
 
 `viewer/index.html` loads the export files from its own folder
 (three.js from jsDelivr). Copy the outputs next to it and serve the folder.
+
+## Whole facet for Unreal
+
+```
+python3 classify_tiles.py --uo "C:/Games/Ascension UO" --facet 0 --out out/classes
+python3 export_facet_tiles.py --uo "C:/Games/Ascension UO" --facet 0 \
+    --classes out/classes/tile_classes.csv --out out/felucca
+```
+
+Writes 8 x 5 tiles of 1009 x 1009 vertices (`felucca_x<i>_y<j>.png`) for
+heights, tile ids and one weight map per terrain layer, named for World
+Partition's tiled landscape import. Unreal scale: X/Y 150, Z 7.5
+(see `facet_manifest.json`).
+
+## Camera
+
+The viewer is locked to the classic UO projection: a cell moves 22 px across
+and 22 px down per step in x or y, and each z lifts it 4 px. Only pan and zoom.
